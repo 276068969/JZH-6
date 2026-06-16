@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS emergency_cases (
     address VARCHAR(180) NOT NULL,
     status VARCHAR(30) NOT NULL,
     assigned_ambulance VARCHAR(30) NULL,
+    dispatch_vehicle_status VARCHAR(30) NULL,
+    dispatched_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -51,10 +53,10 @@ INSERT INTO ambulances (code, plate_no, hospital, driver_name, status, location)
 ('AMB-004', '沪A·12004', '第三人民医院', '赵师傅', 'on_scene', '滨江社区卫生服务站'),
 ('AMB-005', '沪A·12005', '中医医院', '陈师傅', 'maintenance', '车辆保障中心');
 
-INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at) VALUES
-('CASE20260611001', '刘先生', 'high', '人民大道 188 号', 'accepted', 'AMB-001', NOW()),
-('CASE20260611002', '周女士', 'medium', '滨江花园 6 栋', 'reported', 'AMB-004', NOW()),
-('CASE20260611003', '赵先生', 'low', '中心医院门诊大厅', 'closed', 'AMB-002', NOW());
+INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, dispatch_vehicle_status, dispatched_at, created_at) VALUES
+('CASE20260611001', '刘先生', 'high', '人民大道 188 号', 'accepted', 'AMB-001', 'dispatching', DATE_SUB(NOW(), INTERVAL 15 MINUTE), NOW()),
+('CASE20260611002', '周女士', 'medium', '滨江花园 6 栋', 'reported', 'AMB-004', 'standby', DATE_SUB(NOW(), INTERVAL 5 MINUTE), NOW()),
+('CASE20260611003', '赵先生', 'low', '中心医院门诊大厅', 'closed', 'AMB-002', 'dispatching', DATE_SUB(NOW(), INTERVAL 2 HOUR), NOW());
 
 INSERT INTO alerts (title, description, status) VALUES
 ('响应时间超阈值', 'AMB-001 到达现场预计超过监管阈值，请调度复核路线。', 'open'),

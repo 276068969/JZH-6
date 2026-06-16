@@ -88,7 +88,28 @@
                     <?php endforeach; ?>
                 </select>
             </label>
-            <div class="dispatch-hint" id="dispatch-hint">请选择救护车，系统将自动校验车辆是否可派</div>
+            <div class="dispatch-hint" id="dispatch-hint">请选择救护车，系统将自动校验车辆是否可派，并按状态匹配矩阵校验一致性</div>
+            <div class="matrix-panel">
+                <div class="matrix-title">状态匹配矩阵</div>
+                <div class="matrix-grid">
+                    <div class="matrix-row head">
+                        <span>事件状态</span>
+                        <span>期望车辆状态</span>
+                        <span>说明</span>
+                    </div>
+                    <?php foreach (dispatchStatusMatrix() as $key => $rule): ?>
+                        <div class="matrix-row">
+                            <span class="status-tag <?= statusClass($key) ?>"><?= $rule['label'] ?></span>
+                            <span>
+                                <?php foreach ($rule['expected'] as $i => $s): ?>
+                                    <?= $i > 0 ? ' / ' : '' ?><span class="status-tag-small status-<?= $s ?>"><?= statusText($s) ?></span>
+                                <?php endforeach; ?>
+                            </span>
+                            <span class="muted"><?= $rule['description'] ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
             <button type="submit">保存事件并派车</button>
         </form>
     </div>
@@ -181,9 +202,9 @@
     <div class="panel">
         <div class="panel-head">
             <h2>事件列表</h2>
-            <span>派车 · 状态联动</span>
+            <span>派车 · 状态联动 · 快照校验</span>
         </div>
-        <table>
+        <table class="case-table">
             <thead>
                 <tr>
                     <th>编号</th>
@@ -192,20 +213,37 @@
                     <th>派车</th>
                     <th>事件状态</th>
                     <th>车辆状态</th>
+                    <th>匹配状态</th>
                 </tr>
             </thead>
             <tbody>
             <?php foreach ($cases as $case): ?>
-                <tr>
+                <?php
+                    $hasAmbulance = !empty($case['assigned_ambulance']);
+                    $match = checkCaseVehicleStatusMatch(
+                        $case['status'],
+                        $case['ambulance_status'] ?? null,
+                        $hasAmbulance
+                    );
+                ?>
+                <tr class="case-row-<?= $match['level'] ?>">
                     <td class="case-link"><?= h($case['case_no']) ?></td>
                     <td><?= h($case['patient_name']) ?></td>
                     <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
                     <td>
-                        <?php if (!empty($case['assigned_ambulance'])): ?>
+                        <?php if ($hasAmbulance): ?>
                             <div>
                                 <strong><?= h($case['assigned_ambulance']) ?></strong>
                                 <?php if (!empty($case['ambulance_hospital'])): ?>
                                     <div style="font-size:12px;color:var(--muted)"><?= h($case['ambulance_hospital']) ?></div>
+                                <?php endif; ?>
+                                <?php if (!empty($case['dispatch_vehicle_status'])): ?>
+                                    <div class="snapshot-info">
+                                        派车时：<span class="status-tag-small status-<?= h($case['dispatch_vehicle_status']) ?>"><?= statusText($case['dispatch_vehicle_status']) ?></span>
+                                        <?php if (!empty($case['dispatched_at'])): ?>
+                                            <span class="snapshot-time"><?= h($case['dispatched_at']) ?></span>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                         <?php else: ?>
@@ -218,22 +256,31 @@
                         </span>
                     </td>
                     <td>
-                        <?php if (!empty($case['ambulance_status'])): ?>
-                            <?php
-                                $caseActive = $case['status'] !== 'closed';
-                                $vehicleIdle = in_array($case['ambulance_status'], ['standby', 'maintenance'], true);
-                                $mismatch = $caseActive && $vehicleIdle;
-                            ?>
+                        <?php if ($hasAmbulance && !empty($case['ambulance_status'])): ?>
                             <span class="status-tag <?= statusClass($case['ambulance_status']) ?>">
                                 <?= statusText($case['ambulance_status']) ?>
                             </span>
-                            <?php if ($mismatch): ?>
-                                <div style="font-size:11px;color:var(--danger);margin-top:4px">
-                                    ⚠ 状态不一致
-                                </div>
-                            <?php endif; ?>
+                        <?php elseif ($hasAmbulance): ?>
+                            <span style="color:var(--muted);font-size:12px">车辆已移除</span>
                         <?php else: ?>
                             <span style="color:var(--muted);font-size:13px">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($match['level'] === 'match'): ?>
+                            <span class="match-badge match">✓ <?= matchLevelText($match['level']) ?></span>
+                        <?php elseif ($match['level'] === 'warn'): ?>
+                            <span class="match-badge warn">⚡ <?= matchLevelText($match['level']) ?></span>
+                        <?php elseif ($match['level'] === 'error'): ?>
+                            <span class="match-badge error">⚠ <?= matchLevelText($match['level']) ?></span>
+                        <?php else: ?>
+                            <span class="match-badge none">— <?= matchLevelText($match['level']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($match['level'] !== 'none' && $match['level'] !== 'match'): ?>
+                            <div class="match-reason"><?= h($match['reason']) ?></div>
+                        <?php endif; ?>
+                        <?php if ($match['level'] === 'match'): ?>
+                            <div class="match-reason muted"><?= h($match['expected']) ?></div>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -246,14 +293,69 @@
 <script>
 (function() {
     var select = document.getElementById('assigned_ambulance');
+    var caseStatusSelect = document.querySelector('select[name="status"]');
     var hint = document.getElementById('dispatch-hint');
     var form = document.getElementById('case-form');
 
+    var statusTextMap = {
+        'standby': '待命',
+        'dispatching': '出车',
+        'on_scene': '现场处置',
+        'transporting': '转运中',
+        'maintenance': '检修'
+    };
+
+    var matrix = {
+        'reported': {
+            label: '已上报',
+            expected: ['dispatching'],
+            allowed: ['dispatching', 'on_scene', 'transporting'],
+            ideal: 'dispatching',
+            description: '事件已上报派车，车辆应处于「出车」状态'
+        },
+        'accepted': {
+            label: '已受理',
+            expected: ['on_scene', 'transporting'],
+            allowed: ['dispatching', 'on_scene', 'transporting'],
+            ideal: 'on_scene',
+            description: '事件已受理，车辆应处于「现场处置」或「转运中」'
+        },
+        'closed': {
+            label: '已关闭',
+            expected: ['standby', 'maintenance'],
+            allowed: ['standby', 'maintenance'],
+            ideal: 'standby',
+            description: '事件已关闭，车辆应回到「待命」或「检修」'
+        }
+    };
+
+    function checkMatch(caseStatus, vehicleStatus) {
+        var rule = matrix[caseStatus];
+        if (!rule) return { level: 'none', reason: '' };
+        if (rule.expected.indexOf(vehicleStatus) !== -1) {
+            return { level: 'match', reason: '状态匹配' };
+        }
+        if (rule.allowed.indexOf(vehicleStatus) !== -1) {
+            return { level: 'warn', reason: '状态有偏差（' + statusTextMap[vehicleStatus] + '），但在合理范围内' };
+        }
+        return {
+            level: 'error',
+            reason: '状态不一致：事件' + rule.label + ' 但车辆' + statusTextMap[vehicleStatus]
+        };
+    }
+
     function updateHint() {
         var opt = select.options[select.selectedIndex];
+        var caseStatus = caseStatusSelect ? caseStatusSelect.value : 'reported';
+        var rule = matrix[caseStatus] || null;
+
         if (!opt || !opt.value) {
             hint.className = 'dispatch-hint';
-            hint.textContent = '请选择救护车，系统将自动校验车辆是否可派';
+            if (rule) {
+                hint.innerHTML = '请选择救护车。<span class="muted">按状态矩阵：' + rule.description + '</span>';
+            } else {
+                hint.textContent = '请选择救护车，系统将自动校验车辆是否可派，并按状态匹配矩阵校验一致性';
+            }
             return;
         }
 
@@ -263,35 +365,48 @@
         var dispatchable = opt.getAttribute('data-dispatchable') === '1';
         var activeCase = opt.getAttribute('data-active-case') || '';
 
-        var statusTextMap = {
-            'standby': '待命',
-            'dispatching': '出车',
-            'on_scene': '现场处置',
-            'transporting': '转运中',
-            'maintenance': '检修'
-        };
-
-        var info = '车辆 ' + opt.value + ' · ' + hospital + ' · 当前位置：' + location;
+        var info = '车辆 <strong>' + opt.value + '</strong> · ' + hospital + ' · 当前位置：' + location;
 
         if (!dispatchable) {
             hint.className = 'dispatch-hint error';
             if (status === 'maintenance') {
-                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 车辆处于检修状态，请选择其他车辆';
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + '<br>车辆处于检修状态，请选择其他车辆';
             } else if (activeCase) {
-                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 车辆已被事件 <strong>' + activeCase + '</strong> 占用，请勿重复派车';
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + '<br>车辆已被事件 <strong>' + activeCase + '</strong> 占用，请勿重复派车';
             } else {
-                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 状态：' + (statusTextMap[status] || status);
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + '<br>状态：' + (statusTextMap[status] || status);
             }
-        } else if (status !== 'standby') {
-            hint.className = 'dispatch-hint warning';
-            hint.innerHTML = '<strong>可派车（注意）：</strong>' + info + ' · 当前状态：' + (statusTextMap[status] || status) + '，派车后将自动更新为「出车」状态';
-        } else {
+            return;
+        }
+
+        var afterDispatchStatus = 'dispatching';
+        var match = checkMatch(caseStatus, afterDispatchStatus);
+        var snapshotNote = '（派车时状态：' + statusTextMap[status] + ' → 出车）';
+
+        if (match.level === 'match') {
             hint.className = 'dispatch-hint success';
-            hint.innerHTML = '<strong>可派车：</strong>' + info + ' · 车辆待命，派车后状态将自动更新为「出车」';
+            hint.innerHTML = '<strong>✓ 可派车 · 状态匹配</strong><br>' + info +
+                '<br>派车后车辆状态：' + statusTextMap[afterDispatchStatus] +
+                '，符合「' + rule.label + '」期望 ' + snapshotNote;
+        } else if (match.level === 'warn') {
+            hint.className = 'dispatch-hint warning';
+            hint.innerHTML = '<strong>⚡ 可派车 · 状态有偏差</strong><br>' + info +
+                '<br>派车后为「' + statusTextMap[afterDispatchStatus] +
+                '，期望：' + rule.expected.map(function(s){return statusTextMap[s]}).join(' / ') +
+                '<br><span class="muted">' + rule.description + '</span> ' + snapshotNote;
+        } else {
+            hint.className = 'dispatch-hint';
+            hint.innerHTML = '<strong>可派车（注意）</strong><br>' + info +
+                '<br>派车后为「' + statusTextMap[afterDispatchStatus] + '」' +
+                '，与「' + rule.label + '」期望不符' +
+                '<br><span class="muted">' + rule.description + '</span> ' + snapshotNote;
         }
     }
 
     select.addEventListener('change', updateHint);
+    if (caseStatusSelect) {
+        caseStatusSelect.addEventListener('change', updateHint);
+    }
     updateHint();
 
     form.addEventListener('submit', function(e) {

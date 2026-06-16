@@ -83,7 +83,11 @@ final class DashboardRepository
 
     public function casesWithAmbulanceInfo(): array
     {
-        $sql = 'SELECT ec.*, a.hospital as ambulance_hospital, a.status as ambulance_status
+        $sql = 'SELECT ec.*, 
+                       a.hospital as ambulance_hospital, 
+                       a.status as ambulance_status,
+                       ec.dispatch_vehicle_status as dispatch_vehicle_status,
+                       ec.dispatched_at as dispatched_at
                 FROM emergency_cases ec 
                 LEFT JOIN ambulances a ON ec.assigned_ambulance = a.code
                 ORDER BY ec.created_at DESC LIMIT 12';
@@ -134,6 +138,7 @@ final class DashboardRepository
     {
         $warnings = [];
         $errors = [];
+        $dispatchSnapshot = null;
 
         if (!empty($data['assigned_ambulance'])) {
             $check = $this->isAmbulanceAvailable($data['assigned_ambulance']);
@@ -142,6 +147,9 @@ final class DashboardRepository
             }
             if (isset($check['warning'])) {
                 $warnings[] = $check['warning'];
+            }
+            if (isset($check['ambulance'])) {
+                $dispatchSnapshot = $check['ambulance']['status'];
             }
         }
 
@@ -152,22 +160,35 @@ final class DashboardRepository
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare(
-                'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
-                 VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
+                'INSERT INTO emergency_cases 
+                 (case_no, patient_name, priority, address, status, assigned_ambulance, 
+                  dispatch_vehicle_status, dispatched_at, created_at)
+                 VALUES 
+                 (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance,
+                  :dispatch_vehicle_status, :dispatched_at, NOW())'
             );
             $caseNo = 'CASE' . date('YmdHis');
+            $hasAmbulance = !empty($data['assigned_ambulance']);
             $stmt->execute([
                 'case_no' => $caseNo,
                 'patient_name' => $data['patient_name'],
                 'priority' => $data['priority'],
                 'address' => $data['address'],
                 'status' => $data['status'],
-                'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
+                'assigned_ambulance' => $hasAmbulance ? $data['assigned_ambulance'] : null,
+                'dispatch_vehicle_status' => $hasAmbulance ? $dispatchSnapshot : null,
+                'dispatched_at' => $hasAmbulance ? date('Y-m-d H:i:s') : null,
             ]);
 
-            if (!empty($data['assigned_ambulance']) && $data['status'] !== 'closed') {
+            if ($hasAmbulance && $data['status'] !== 'closed') {
                 $stmt = $this->db->prepare('UPDATE ambulances SET status = "dispatching", updated_at = NOW() WHERE code = :code');
                 $stmt->execute(['code' => $data['assigned_ambulance']]);
+
+                $matrix = dispatchStatusMatrix();
+                $rule = $matrix[$data['status']] ?? null;
+                if ($rule && !in_array('dispatching', $rule['expected'], true)) {
+                    $warnings[] = '状态提示：' . $rule['description'] . '，当前已自动设为出车，请后续同步更新车辆状态。';
+                }
             }
 
             $this->db->commit();
