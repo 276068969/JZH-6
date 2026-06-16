@@ -379,26 +379,26 @@
             return;
         }
 
-        var afterDispatchStatus = 'dispatching';
+        var afterDispatchStatus = rule ? rule.ideal : 'dispatching';
         var match = checkMatch(caseStatus, afterDispatchStatus);
-        var snapshotNote = '（派车时状态：' + statusTextMap[status] + ' → 出车）';
+        var snapshotNote = '（派车快照：' + statusTextMap[status] + ' → ' + statusTextMap[afterDispatchStatus] + '）';
 
         if (match.level === 'match') {
             hint.className = 'dispatch-hint success';
             hint.innerHTML = '<strong>✓ 可派车 · 状态匹配</strong><br>' + info +
-                '<br>派车后车辆状态：' + statusTextMap[afterDispatchStatus] +
-                '，符合「' + rule.label + '」期望 ' + snapshotNote;
+                '<br>按矩阵规则「' + rule.label + '」→ 派车后自动设为<strong>' + statusTextMap[afterDispatchStatus] + '</strong>' +
+                '<br>期望：' + rule.expected.map(function(s){return statusTextMap[s]}).join(' / ') +
+                ' · ' + snapshotNote;
         } else if (match.level === 'warn') {
             hint.className = 'dispatch-hint warning';
             hint.innerHTML = '<strong>⚡ 可派车 · 状态有偏差</strong><br>' + info +
-                '<br>派车后为「' + statusTextMap[afterDispatchStatus] +
-                '，期望：' + rule.expected.map(function(s){return statusTextMap[s]}).join(' / ') +
+                '<br>按矩阵规则「' + rule.label + '」→ 派车后设为<strong>' + statusTextMap[afterDispatchStatus] + '</strong>' +
+                '，但允许范围：' + rule.allowed.map(function(s){return statusTextMap[s]}).join(' / ') +
                 '<br><span class="muted">' + rule.description + '</span> ' + snapshotNote;
         } else {
             hint.className = 'dispatch-hint';
             hint.innerHTML = '<strong>可派车（注意）</strong><br>' + info +
-                '<br>派车后为「' + statusTextMap[afterDispatchStatus] + '」' +
-                '，与「' + rule.label + '」期望不符' +
+                '<br>派车后将设为「' + statusTextMap[afterDispatchStatus] + '」，与「' + rule.label + '」期望不符' +
                 '<br><span class="muted">' + rule.description + '</span> ' + snapshotNote;
         }
     }

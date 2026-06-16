@@ -139,6 +139,7 @@ final class DashboardRepository
         $warnings = [];
         $errors = [];
         $dispatchSnapshot = null;
+        $dispatchInfo = [];
 
         if (!empty($data['assigned_ambulance'])) {
             $check = $this->isAmbulanceAvailable($data['assigned_ambulance']);
@@ -156,6 +157,10 @@ final class DashboardRepository
         if (!empty($errors)) {
             return ['success' => false, 'errors' => $errors];
         }
+
+        $matrix = dispatchStatusMatrix();
+        $rule = $matrix[$data['status']] ?? null;
+        $targetVehicleStatus = $rule ? $rule['ideal'] : 'dispatching';
 
         $this->db->beginTransaction();
         try {
@@ -181,18 +186,35 @@ final class DashboardRepository
             ]);
 
             if ($hasAmbulance && $data['status'] !== 'closed') {
-                $stmt = $this->db->prepare('UPDATE ambulances SET status = "dispatching", updated_at = NOW() WHERE code = :code');
-                $stmt->execute(['code' => $data['assigned_ambulance']]);
+                $stmt = $this->db->prepare('UPDATE ambulances SET status = :target_status, updated_at = NOW() WHERE code = :code');
+                $stmt->execute([
+                    'code' => $data['assigned_ambulance'],
+                    'target_status' => $targetVehicleStatus,
+                ]);
 
-                $matrix = dispatchStatusMatrix();
-                $rule = $matrix[$data['status']] ?? null;
-                if ($rule && !in_array('dispatching', $rule['expected'], true)) {
-                    $warnings[] = '状态提示：' . $rule['description'] . '，当前已自动设为出车，请后续同步更新车辆状态。';
+                $dispatchInfo = [
+                    'vehicle_code' => $data['assigned_ambulance'],
+                    'snapshot_status' => $dispatchSnapshot,
+                    'target_status' => $targetVehicleStatus,
+                    'case_status' => $data['status'],
+                ];
+
+                if ($rule) {
+                    if (in_array($targetVehicleStatus, $rule['expected'], true)) {
+                        $warnings[] = '派车成功：按规则「' . $rule['description'] . '」，车辆状态已自动设为「' . statusText($targetVehicleStatus) . '」';
+                    } else {
+                        $warnings[] = '派车提示：按规则「' . $rule['description'] . '」，车辆理想状态为「' . statusText($rule['ideal']) . '」，当前已设为「' . statusText($targetVehicleStatus) . '」';
+                    }
                 }
             }
 
             $this->db->commit();
-            return ['success' => true, 'case_no' => $caseNo, 'warnings' => $warnings];
+            return [
+                'success' => true,
+                'case_no' => $caseNo,
+                'warnings' => $warnings,
+                'dispatch_info' => $dispatchInfo,
+            ];
         } catch (\Throwable $e) {
             $this->db->rollBack();
             return ['success' => false, 'errors' => ['保存失败：' . $e->getMessage()]];
