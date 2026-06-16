@@ -1,0 +1,353 @@
+<?php ob_start(); ?>
+<section class="admin-head">
+    <div>
+        <p class="eyebrow">后台管理</p>
+        <h1>调度监管工作台</h1>
+    </div>
+    <div class="operator">当前用户：<?= h($user['name']) ?>（<?= h($user['role']) ?>）</div>
+</section>
+
+<?php if (!empty($flash)): ?>
+<section class="flash-messages">
+    <?php foreach (['success', 'errors', 'warnings'] as $type): ?>
+        <?php if (!empty($flash[$type])): ?>
+            <div class="flash <?= $type ?>">
+                <ul>
+                    <?php foreach ($flash[$type] as $msg): ?>
+                        <li><?= h($msg) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+    <?php endforeach; ?>
+</section>
+<?php endif; ?>
+
+<section class="metrics compact">
+    <div><span>接入车辆</span><strong><?= (int) $overview['ambulances_total'] ?></strong></div>
+    <div><span>在线车辆</span><strong><?= (int) $overview['ambulances_online'] ?></strong></div>
+    <div><span>事件处理中</span><strong><?= (int) $overview['active_cases'] ?></strong></div>
+    <div><span>告警待处置</span><strong><?= (int) $overview['alerts'] ?></strong></div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>新增急救事件</h2>
+            <span>调度录入 · 派车校验</span>
+        </div>
+        <form class="stack-form" method="post" action="/admin/cases" id="case-form">
+            <label><span>患者/呼叫人</span><input name="patient_name" required></label>
+            <label><span>地址</span><input name="address" required></label>
+            <div class="form-row">
+                <label>
+                    <span>优先级</span>
+                    <select name="priority">
+                        <option value="high">高</option>
+                        <option value="medium" selected>中</option>
+                        <option value="low">低</option>
+                    </select>
+                </label>
+                <label>
+                    <span>状态</span>
+                    <select name="status">
+                        <option value="reported">已上报</option>
+                        <option value="accepted">已受理</option>
+                    </select>
+                </label>
+            </div>
+            <label>
+                <span>派车（选择救护车）</span>
+                <select name="assigned_ambulance" id="assigned_ambulance">
+                    <option value="">-- 暂不派车 --</option>
+                    <?php foreach ($ambulances as $ambulance): ?>
+                        <?php
+                            $dispatchable = isAmbulanceDispatchable($ambulance);
+                            $optionClass = '';
+                            $disabled = '';
+                            if (!$dispatchable) {
+                                if ($ambulance['status'] === 'maintenance') {
+                                    $optionClass = 'maintenance';
+                                    $disabled = 'disabled';
+                                } else {
+                                    $optionClass = 'busy';
+                                    $disabled = 'disabled';
+                                }
+                            } else {
+                                $optionClass = 'dispatchable';
+                            }
+                        ?>
+                        <option value="<?= h($ambulance['code']) ?>" class="<?= $optionClass ?>" <?= $disabled ?>
+                            data-status="<?= h($ambulance['status']) ?>"
+                            data-hospital="<?= h($ambulance['hospital']) ?>"
+                            data-location="<?= h($ambulance['location']) ?>"
+                            data-dispatchable="<?= $dispatchable ? '1' : '0' ?>"
+                            data-active-case="<?= h($ambulance['active_case_no'] ?? '') ?>">
+                            <?= h(ambulanceOptionLabel($ambulance)) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <div class="dispatch-hint" id="dispatch-hint">请选择救护车，系统将自动校验车辆是否可派</div>
+            <button type="submit">保存事件并派车</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h2>车辆状态维护</h2>
+            <span>监管更新 · 联动检查</span>
+        </div>
+        <form class="stack-form" method="post" action="/admin/ambulances">
+            <label>
+                <span>车辆</span>
+                <select name="id" id="ambulance-select">
+                    <?php foreach ($ambulances as $ambulance): ?>
+                        <option value="<?= (int) $ambulance['id'] ?>"
+                            data-status="<?= h($ambulance['status']) ?>"
+                            data-active-case="<?= h($ambulance['active_case_no'] ?? '') ?>">
+                            <?= h($ambulance['code']) ?> · <?= h($ambulance['hospital']) ?> · <?= statusText($ambulance['status']) ?>
+                            <?php if (!empty($ambulance['active_case_no'])): ?>
+                                · 关联 <?= h($ambulance['active_case_no']) ?>
+                            <?php endif; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>
+                <span>状态</span>
+                <select name="status" id="ambulance-status">
+                    <option value="standby">待命</option>
+                    <option value="dispatching">出车</option>
+                    <option value="on_scene">现场处置</option>
+                    <option value="transporting">转运中</option>
+                    <option value="maintenance">检修</option>
+                </select>
+            </label>
+            <label><span>当前位置</span><input name="location" required></label>
+            <div class="dispatch-hint" id="ambulance-linkage-hint">选择车辆后，若设为待命/检修将自动检查关联事件状态</div>
+            <button type="submit">更新车辆</button>
+        </form>
+    </div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>车辆列表</h2>
+            <span>状态 · 当前任务</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>车辆</th>
+                    <th>医院</th>
+                    <th>位置</th>
+                    <th>状态</th>
+                    <th>当前任务</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($ambulances as $ambulance): ?>
+                <tr>
+                    <td><?= h($ambulance['code']) ?></td>
+                    <td><?= h($ambulance['hospital']) ?></td>
+                    <td><?= h($ambulance['location']) ?></td>
+                    <td>
+                        <span class="status-tag <?= statusClass($ambulance['status']) ?>">
+                            <?= statusText($ambulance['status']) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <?php if (!empty($ambulance['active_case_no'])): ?>
+                            <span class="dispatch-tag busy">
+                                占用 · <?= h($ambulance['active_case_no']) ?>
+                                <small>(<?= statusText($ambulance['active_case_status']) ?>)</small>
+                            </span>
+                        <?php elseif ($ambulance['status'] === 'standby'): ?>
+                            <span class="dispatch-tag">可派车</span>
+                        <?php elseif ($ambulance['status'] === 'maintenance'): ?>
+                            <span class="dispatch-tag none">检修中</span>
+                        <?php else: ?>
+                            <span class="dispatch-tag busy">勤务中</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h2>事件列表</h2>
+            <span>派车 · 状态联动</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>编号</th>
+                    <th>患者</th>
+                    <th>优先级</th>
+                    <th>派车</th>
+                    <th>事件状态</th>
+                    <th>车辆状态</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($cases as $case): ?>
+                <tr>
+                    <td class="case-link"><?= h($case['case_no']) ?></td>
+                    <td><?= h($case['patient_name']) ?></td>
+                    <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
+                    <td>
+                        <?php if (!empty($case['assigned_ambulance'])): ?>
+                            <div>
+                                <strong><?= h($case['assigned_ambulance']) ?></strong>
+                                <?php if (!empty($case['ambulance_hospital'])): ?>
+                                    <div style="font-size:12px;color:var(--muted)"><?= h($case['ambulance_hospital']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        <?php else: ?>
+                            <span class="dispatch-tag none">待派车</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <span class="status-tag <?= statusClass($case['status']) ?>">
+                            <?= statusText($case['status']) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <?php if (!empty($case['ambulance_status'])): ?>
+                            <?php
+                                $caseActive = $case['status'] !== 'closed';
+                                $vehicleIdle = in_array($case['ambulance_status'], ['standby', 'maintenance'], true);
+                                $mismatch = $caseActive && $vehicleIdle;
+                            ?>
+                            <span class="status-tag <?= statusClass($case['ambulance_status']) ?>">
+                                <?= statusText($case['ambulance_status']) ?>
+                            </span>
+                            <?php if ($mismatch): ?>
+                                <div style="font-size:11px;color:var(--danger);margin-top:4px">
+                                    ⚠ 状态不一致
+                                </div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span style="color:var(--muted);font-size:13px">—</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+(function() {
+    var select = document.getElementById('assigned_ambulance');
+    var hint = document.getElementById('dispatch-hint');
+    var form = document.getElementById('case-form');
+
+    function updateHint() {
+        var opt = select.options[select.selectedIndex];
+        if (!opt || !opt.value) {
+            hint.className = 'dispatch-hint';
+            hint.textContent = '请选择救护车，系统将自动校验车辆是否可派';
+            return;
+        }
+
+        var status = opt.getAttribute('data-status') || '';
+        var hospital = opt.getAttribute('data-hospital') || '';
+        var location = opt.getAttribute('data-location') || '';
+        var dispatchable = opt.getAttribute('data-dispatchable') === '1';
+        var activeCase = opt.getAttribute('data-active-case') || '';
+
+        var statusTextMap = {
+            'standby': '待命',
+            'dispatching': '出车',
+            'on_scene': '现场处置',
+            'transporting': '转运中',
+            'maintenance': '检修'
+        };
+
+        var info = '车辆 ' + opt.value + ' · ' + hospital + ' · 当前位置：' + location;
+
+        if (!dispatchable) {
+            hint.className = 'dispatch-hint error';
+            if (status === 'maintenance') {
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 车辆处于检修状态，请选择其他车辆';
+            } else if (activeCase) {
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 车辆已被事件 <strong>' + activeCase + '</strong> 占用，请勿重复派车';
+            } else {
+                hint.innerHTML = '<strong>不可派车：</strong>' + info + ' · 状态：' + (statusTextMap[status] || status);
+            }
+        } else if (status !== 'standby') {
+            hint.className = 'dispatch-hint warning';
+            hint.innerHTML = '<strong>可派车（注意）：</strong>' + info + ' · 当前状态：' + (statusTextMap[status] || status) + '，派车后将自动更新为「出车」状态';
+        } else {
+            hint.className = 'dispatch-hint success';
+            hint.innerHTML = '<strong>可派车：</strong>' + info + ' · 车辆待命，派车后状态将自动更新为「出车」';
+        }
+    }
+
+    select.addEventListener('change', updateHint);
+    updateHint();
+
+    form.addEventListener('submit', function(e) {
+        var opt = select.options[select.selectedIndex];
+        if (opt && opt.value) {
+            var dispatchable = opt.getAttribute('data-dispatchable') === '1';
+            if (!dispatchable) {
+                if (!confirm('所选车辆不可派车，是否仍要提交事件（不分配车辆）？')) {
+                    e.preventDefault();
+                    return;
+                }
+                select.value = '';
+            }
+        }
+    });
+
+    var ambSelect = document.getElementById('ambulance-select');
+    var ambStatus = document.getElementById('ambulance-status');
+    var ambHint = document.getElementById('ambulance-linkage-hint');
+
+    function updateAmbulanceHint() {
+        var opt = ambSelect.options[ambSelect.selectedIndex];
+        var targetStatus = ambStatus.value;
+        if (!opt) {
+            ambHint.className = 'dispatch-hint';
+            ambHint.textContent = '选择车辆后，若设为待命/检修将自动检查关联事件状态';
+            return;
+        }
+
+        var code = opt.textContent.split('·')[0].trim();
+        var activeCase = opt.getAttribute('data-active-case') || '';
+        var currentStatus = opt.getAttribute('data-status') || '';
+
+        if (targetStatus === 'standby' && activeCase) {
+            ambHint.className = 'dispatch-hint warning';
+            ambHint.innerHTML = '<strong>联动提示：</strong>车辆 ' + code + ' 设为待命，但仍有关联进行中事件 <strong>' + activeCase + '</strong>，请确认是否需要结案。';
+        } else if (targetStatus === 'maintenance' && activeCase) {
+            ambHint.className = 'dispatch-hint error';
+            ambHint.innerHTML = '<strong>警告：</strong>车辆 ' + code + ' 设为检修，但仍有关联进行中事件 <strong>' + activeCase + '</strong>，请先重新调度再设检修。';
+        } else if (targetStatus === 'dispatching' && !activeCase && currentStatus === 'standby') {
+            ambHint.className = 'dispatch-hint success';
+            ambHint.innerHTML = '<strong>提示：</strong>车辆 ' + code + ' 设为出车，请确认已通过新增急救事件完成派车关联。';
+        } else {
+            ambHint.className = 'dispatch-hint';
+            ambHint.textContent = '车辆 ' + code + ' · 当前状态：' + ({
+                'standby':'待命','dispatching':'出车','on_scene':'现场处置','transporting':'转运中','maintenance':'检修'
+            }[currentStatus] || currentStatus) + (activeCase ? ' · 关联事件：' + activeCase : '');
+        }
+    }
+
+    ambSelect.addEventListener('change', updateAmbulanceHint);
+    ambStatus.addEventListener('change', updateAmbulanceHint);
+    updateAmbulanceHint();
+})();
+</script>
+<?php
+$content = ob_get_clean();
+$title = '后台管理 - 救护车监管平台';
+require __DIR__ . '/layout.php';

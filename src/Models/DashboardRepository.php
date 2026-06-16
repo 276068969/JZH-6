@@ -1,0 +1,235 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models;
+
+use App\Core\Database;
+use PDO;
+
+final class DashboardRepository
+{
+    private PDO $db;
+
+    public function __construct()
+    {
+        $this->db = Database::connection();
+    }
+
+    public function overview(): array
+    {
+        return [
+            'ambulances_total' => (int) $this->db->query('SELECT COUNT(*) FROM ambulances')->fetchColumn(),
+            'ambulances_online' => (int) $this->db->query('SELECT COUNT(*) FROM ambulances WHERE status IN ("standby", "dispatching", "on_scene", "transporting")')->fetchColumn(),
+            'active_cases' => (int) $this->db->query('SELECT COUNT(*) FROM emergency_cases WHERE status != "closed"')->fetchColumn(),
+            'alerts' => (int) $this->db->query('SELECT COUNT(*) FROM alerts WHERE status = "open"')->fetchColumn(),
+        ];
+    }
+
+    public function ambulances(): array
+    {
+        return $this->db->query('SELECT * FROM ambulances ORDER BY FIELD(status, "dispatching", "on_scene", "transporting", "standby", "maintenance"), code')->fetchAll();
+    }
+
+    public function cases(): array
+    {
+        return $this->db->query('SELECT * FROM emergency_cases ORDER BY created_at DESC LIMIT 12')->fetchAll();
+    }
+
+    public function alerts(): array
+    {
+        return $this->db->query('SELECT * FROM alerts ORDER BY created_at DESC LIMIT 8')->fetchAll();
+    }
+
+    public function createCase(array $data): void
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
+             VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
+        );
+        $stmt->execute([
+            'case_no' => 'CASE' . date('YmdHis'),
+            'patient_name' => $data['patient_name'],
+            'priority' => $data['priority'],
+            'address' => $data['address'],
+            'status' => $data['status'],
+            'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
+        ]);
+    }
+
+    public function updateAmbulance(int $id, string $status, string $location): void
+    {
+        $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
+        $stmt->execute([
+            'id' => $id,
+            'status' => $status,
+            'location' => $location,
+        ]);
+    }
+
+    public function ambulancesWithDispatchInfo(): array
+    {
+        $sql = 'SELECT a.*, 
+                       (SELECT ec.case_no FROM emergency_cases ec 
+                        WHERE ec.assigned_ambulance = a.code AND ec.status != "closed" 
+                        ORDER BY ec.created_at DESC LIMIT 1) as active_case_no,
+                       (SELECT ec.status FROM emergency_cases ec 
+                        WHERE ec.assigned_ambulance = a.code AND ec.status != "closed" 
+                        ORDER BY ec.created_at DESC LIMIT 1) as active_case_status
+                FROM ambulances a 
+                ORDER BY FIELD(a.status, "dispatching", "on_scene", "transporting", "standby", "maintenance"), a.code';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function casesWithAmbulanceInfo(): array
+    {
+        $sql = 'SELECT ec.*, a.hospital as ambulance_hospital, a.status as ambulance_status
+                FROM emergency_cases ec 
+                LEFT JOIN ambulances a ON ec.assigned_ambulance = a.code
+                ORDER BY ec.created_at DESC LIMIT 12';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function isAmbulanceAvailable(string $code): array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+        $stmt->execute(['code' => $code]);
+        $ambulance = $stmt->fetch();
+
+        if (!$ambulance) {
+            return ['available' => false, 'reason' => '车辆编号不存在'];
+        }
+
+        $unavailableStatuses = ['maintenance'];
+        if (in_array($ambulance['status'], $unavailableStatuses, true)) {
+            return ['available' => false, 'reason' => '车辆状态：' . statusText($ambulance['status']) . '，不可派车'];
+        }
+
+        $stmt = $this->db->prepare('SELECT ec.* FROM emergency_cases ec 
+                                     WHERE ec.assigned_ambulance = :code AND ec.status != "closed" 
+                                     ORDER BY ec.created_at DESC LIMIT 1');
+        $stmt->execute(['code' => $code]);
+        $activeCase = $stmt->fetch();
+
+        if ($activeCase) {
+            return [
+                'available' => false,
+                'reason' => '车辆已被事件 ' . $activeCase['case_no'] . ' 占用（' . statusText($activeCase['status']) . '）',
+                'active_case' => $activeCase,
+            ];
+        }
+
+        if ($ambulance['status'] !== 'standby') {
+            return [
+                'available' => true,
+                'warning' => '车辆当前状态：' . statusText($ambulance['status']) . '，派车后状态将更新为出车',
+                'ambulance' => $ambulance,
+            ];
+        }
+
+        return ['available' => true, 'ambulance' => $ambulance];
+    }
+
+    public function createCaseWithDispatch(array $data): array
+    {
+        $warnings = [];
+        $errors = [];
+
+        if (!empty($data['assigned_ambulance'])) {
+            $check = $this->isAmbulanceAvailable($data['assigned_ambulance']);
+            if (!$check['available']) {
+                $errors[] = $check['reason'];
+            }
+            if (isset($check['warning'])) {
+                $warnings[] = $check['warning'];
+            }
+        }
+
+        if (!empty($errors)) {
+            return ['success' => false, 'errors' => $errors];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare(
+                'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
+                 VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
+            );
+            $caseNo = 'CASE' . date('YmdHis');
+            $stmt->execute([
+                'case_no' => $caseNo,
+                'patient_name' => $data['patient_name'],
+                'priority' => $data['priority'],
+                'address' => $data['address'],
+                'status' => $data['status'],
+                'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
+            ]);
+
+            if (!empty($data['assigned_ambulance']) && $data['status'] !== 'closed') {
+                $stmt = $this->db->prepare('UPDATE ambulances SET status = "dispatching", updated_at = NOW() WHERE code = :code');
+                $stmt->execute(['code' => $data['assigned_ambulance']]);
+            }
+
+            $this->db->commit();
+            return ['success' => true, 'case_no' => $caseNo, 'warnings' => $warnings];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['保存失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function updateAmbulanceWithLinkage(int $id, string $status, string $location): array
+    {
+        $warnings = [];
+
+        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $ambulance = $stmt->fetch();
+        if (!$ambulance) {
+            return ['success' => false, 'errors' => ['车辆不存在']];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
+            $stmt->execute([
+                'id' => $id,
+                'status' => $status,
+                'location' => $location,
+            ]);
+
+            if ($status === 'standby') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => $ambulance['code']]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '提示：车辆设为待命，但事件 ' . $activeCase['case_no'] . ' 尚未关闭，请确认是否需要结案。';
+                }
+            }
+
+            if ($status === 'maintenance') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => $ambulance['code']]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '警告：车辆设为检修，但仍有关联进行中事件 ' . $activeCase['case_no'] . '，请重新调度。';
+                }
+            }
+
+            $this->db->commit();
+            return ['success' => true, 'warnings' => $warnings];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function ambulanceDispatchCheckApi(string $code): array
+    {
+        return $this->isAmbulanceAvailable($code);
+    }
+}
