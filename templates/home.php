@@ -19,46 +19,104 @@
     <div><span>未处理告警</span><strong><?= (int) $overview['alerts'] ?></strong></div>
 </section>
 
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-head">
-            <h2>车辆监管</h2>
-            <span><?= date('Y-m-d H:i') ?></span>
-        </div>
-        <div class="vehicle-map">
-            <?php foreach ($ambulances as $index => $ambulance): ?>
-                <article class="vehicle-card">
-                    <span class="dot status-<?= h($ambulance['status']) ?>"></span>
-                    <h3><?= h($ambulance['code']) ?></h3>
-                    <p><?= h($ambulance['hospital']) ?></p>
-                    <p><?= h($ambulance['location']) ?></p>
-                    <b><?= statusText($ambulance['status']) ?></b>
-                </article>
-            <?php endforeach; ?>
+<section class="panel">
+    <div class="panel-head">
+        <h2>车辆态势监管</h2>
+        <div class="vehicle-status-stats">
+            <span class="stat-item stat-dispatching"><i></i>出车 <?= count(array_filter($ambulances, fn($a) => $a['status'] === 'dispatching')) ?></span>
+            <span class="stat-item stat-transporting"><i></i>转运 <?= count(array_filter($ambulances, fn($a) => $a['status'] === 'transporting')) ?></span>
+            <span class="stat-item stat-onscene"><i></i>现场 <?= count(array_filter($ambulances, fn($a) => $a['status'] === 'on_scene')) ?></span>
+            <span class="stat-item stat-standby"><i></i>待命 <?= count(array_filter($ambulances, fn($a) => $a['status'] === 'standby')) ?></span>
+            <span class="stat-item stat-maintenance"><i></i>检修 <?= count(array_filter($ambulances, fn($a) => $a['status'] === 'maintenance')) ?></span>
         </div>
     </div>
+    <div class="vehicle-grid">
+        <?php foreach ($ambulances as $ambulance): ?>
+            <?php
+                $status = $ambulance['status'];
+                $hasActiveCase = !empty($ambulance['active_case_no']);
+                $isAbnormal = ($status === 'dispatching' || $status === 'on_scene' || $status === 'transporting') && !$hasActiveCase;
+                $isMaintenance = $status === 'maintenance';
+            ?>
+            <article class="vehicle-status-card vehicle-status-<?= h($status) ?><?= $isAbnormal ? ' vehicle-abnormal' : '' ?><?= $isMaintenance ? ' vehicle-maintenance' : '' ?>">
+                <div class="vehicle-card-header">
+                    <div class="vehicle-code-block">
+                        <span class="vehicle-code"><?= h($ambulance['code']) ?></span>
+                        <span class="vehicle-plate"><?= h($ambulance['plate_no']) ?></span>
+                    </div>
+                    <span class="vehicle-status-badge status-<?= h($status) ?>">
+                        <span class="pulse-dot"></span>
+                        <?= statusText($status) ?>
+                    </span>
+                </div>
+                <div class="vehicle-card-body">
+                    <div class="vehicle-info-row">
+                        <span class="info-label">所属医院</span>
+                        <span class="info-value hospital"><?= h($ambulance['hospital']) ?></span>
+                    </div>
+                    <div class="vehicle-info-row">
+                        <span class="info-label">驾驶员</span>
+                        <span class="info-value"><?= h($ambulance['driver_name']) ?></span>
+                    </div>
+                    <div class="vehicle-info-row location-row">
+                        <span class="info-label">当前位置</span>
+                        <span class="info-value location"><?= h($ambulance['location']) ?></span>
+                    </div>
+                </div>
+                <div class="vehicle-card-footer">
+                    <?php if ($hasActiveCase): ?>
+                        <div class="active-case-info">
+                            <span class="case-label">关联事件</span>
+                            <span class="case-no"><?= h($ambulance['active_case_no']) ?></span>
+                            <span class="case-status status-tag-small status-<?= h($ambulance['active_case_status']) ?>">
+                                <?= statusText($ambulance['active_case_status']) ?>
+                            </span>
+                        </div>
+                    <?php elseif ($status === 'standby'): ?>
+                        <div class="dispatch-available">
+                            <span class="available-icon">✓</span>
+                            <span>可立即派车</span>
+                        </div>
+                    <?php elseif ($isMaintenance): ?>
+                        <div class="maintenance-info">
+                            <span class="maintenance-icon">⚙</span>
+                            <span>检修中 · 暂不可派</span>
+                        </div>
+                    <?php else: ?>
+                        <div class="abnormal-warning">
+                            <span class="warning-icon">⚠</span>
+                            <span>状态异常 · 未关联事件</span>
+                        </div>
+                    <?php endif; ?>
+                    <div class="update-time">
+                        更新于 <?= h(date('H:i', strtotime($ambulance['updated_at']))) ?>
+                    </div>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </div>
+</section>
 
-    <div class="panel">
-        <div class="panel-head">
-            <h2>急救事件</h2>
-            <span>最近 12 条</span>
-        </div>
-        <table>
-            <thead>
-                <tr><th>编号</th><th>级别</th><th>状态</th><th>车辆</th></tr>
-            </thead>
-            <tbody>
-            <?php foreach ($cases as $case): ?>
-                <tr>
-                    <td><?= h($case['case_no']) ?></td>
-                    <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
-                    <td><?= statusText($case['status']) ?></td>
-                    <td><?= h($case['assigned_ambulance'] ?: '待派车') ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+<section class="panel">
+    <div class="panel-head">
+        <h2>急救事件</h2>
+        <span>最近 12 条</span>
     </div>
+    <table>
+        <thead>
+            <tr><th>编号</th><th>级别</th><th>状态</th><th>车辆</th></tr>
+        </thead>
+        <tbody>
+        <?php foreach ($cases as $case): ?>
+            <tr>
+                <td><?= h($case['case_no']) ?></td>
+                <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
+                <td><?= statusText($case['status']) ?></td>
+                <td><?= h($case['assigned_ambulance'] ?: '待派车') ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
 </section>
 
 <section class="panel">

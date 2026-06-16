@@ -21,7 +21,7 @@ final class AppController
     {
         View::render('home', [
             'overview' => $this->repo->overview(),
-            'ambulances' => $this->repo->ambulances(),
+            'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
             'cases' => $this->repo->cases(),
             'alerts' => $this->repo->alerts(),
             'user' => Auth::user(),

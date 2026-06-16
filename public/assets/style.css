@@ -224,50 +224,313 @@ h2 {
     color: var(--ink);
 }
 
-.vehicle-map {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+.vehicle-status-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
-.vehicle-card {
-    position: relative;
-    min-height: 138px;
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fbfdff;
-}
-
-.vehicle-card h3 {
-    margin-bottom: 8px;
-}
-
-.vehicle-card p {
-    margin-bottom: 6px;
-    color: var(--muted);
+.vehicle-status-stats .stat-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
     font-size: 13px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: var(--muted);
 }
 
-.vehicle-card b {
-    color: var(--primary);
-}
-
-.dot {
-    position: absolute;
-    top: 18px;
-    right: 18px;
-    width: 10px;
-    height: 10px;
+.vehicle-status-stats .stat-item i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
+}
+
+.vehicle-status-stats .stat-dispatching { background: #ccfbf1; color: #0f766e; }
+.vehicle-status-stats .stat-dispatching i { background: var(--accent); }
+.vehicle-status-stats .stat-transporting { background: #ede9fe; color: #6d28d9; }
+.vehicle-status-stats .stat-transporting i { background: #7c3aed; }
+.vehicle-status-stats .stat-onscene { background: #e0f2fe; color: #0369a1; }
+.vehicle-status-stats .stat-onscene i { background: #0369a1; }
+.vehicle-status-stats .stat-standby { background: #dcfce7; color: #166534; }
+.vehicle-status-stats .stat-standby i { background: var(--ok); }
+.vehicle-status-stats .stat-maintenance { background: #fef3c7; color: #92400e; }
+.vehicle-status-stats .stat-maintenance i { background: var(--warn); }
+
+.vehicle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.vehicle-status-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    border: 2px solid var(--line);
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vehicle-status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(20, 38, 67, 0.12);
+}
+
+.vehicle-status-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
     background: var(--muted);
 }
 
-.status-standby { background: var(--ok); }
-.status-dispatching,
-.status-on_scene,
-.status-transporting { background: var(--accent); }
-.status-maintenance { background: var(--warn); }
+.vehicle-status-card.vehicle-status-standby::before { background: var(--ok); }
+.vehicle-status-card.vehicle-status-dispatching::before { background: var(--accent); }
+.vehicle-status-card.vehicle-status-on_scene::before { background: #0369a1; }
+.vehicle-status-card.vehicle-status-transporting::before { background: #7c3aed; }
+.vehicle-status-card.vehicle-status-maintenance::before { background: var(--warn); }
+
+.vehicle-status-card.vehicle-abnormal {
+    border-color: var(--danger);
+    animation: abnormal-pulse 2s ease-in-out infinite;
+}
+
+.vehicle-status-card.vehicle-abnormal::before {
+    background: var(--danger);
+}
+
+.vehicle-status-card.vehicle-maintenance {
+    opacity: 0.85;
+}
+
+@keyframes abnormal-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194, 65, 12, 0.3); }
+    50% { box-shadow: 0 0 0 8px rgba(194, 65, 12, 0); }
+}
+
+.vehicle-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 18px 18px 12px;
+    gap: 12px;
+}
+
+.vehicle-code-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vehicle-code {
+    font-size: 26px;
+    font-weight: 800;
+    font-family: Consolas, "Courier New", monospace;
+    color: var(--ink);
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+}
+
+.vehicle-plate {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: Consolas, monospace;
+}
+
+.vehicle-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--muted);
+    white-space: nowrap;
+}
+
+.vehicle-status-badge.status-standby { background: var(--ok); }
+.vehicle-status-badge.status-dispatching { background: var(--accent); }
+.vehicle-status-badge.status-on_scene,
+.vehicle-status-badge.status-onscene { background: #0369a1; }
+.vehicle-status-badge.status-transporting { background: #7c3aed; }
+.vehicle-status-badge.status-maintenance { background: var(--warn); }
+
+.pulse-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+    animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+.vehicle-card-body {
+    padding: 0 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vehicle-info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.vehicle-info-row .info-label {
+    flex-shrink: 0;
+    min-width: 64px;
+    color: var(--muted);
+    font-size: 12px;
+    padding-top: 1px;
+}
+
+.vehicle-info-row .info-value {
+    color: var(--ink);
+    font-weight: 500;
+    word-break: break-all;
+}
+
+.vehicle-info-row .info-value.hospital {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.vehicle-info-row.location-row .info-value.location {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.vehicle-card-footer {
+    margin-top: auto;
+    padding: 12px 18px 16px;
+    border-top: 1px dashed var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.active-case-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.active-case-info .case-label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.active-case-info .case-no {
+    font-family: Consolas, monospace;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--danger);
+}
+
+.dispatch-available {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ok);
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.dispatch-available .available-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #dcfce7;
+    color: var(--ok);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.maintenance-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--warn);
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.maintenance-info .maintenance-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fef3c7;
+    color: var(--warn);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.abnormal-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--danger);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.abnormal-warning .warning-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: var(--danger);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.update-time {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: Consolas, monospace;
+}
+
+@media (max-width: 880px) {
+    .vehicle-grid {
+        grid-template-columns: 1fr;
+    }
+    .vehicle-status-stats {
+        gap: 8px;
+    }
+    .vehicle-status-stats .stat-item {
+        font-size: 12px;
+        padding: 3px 10px;
+    }
+}
 
 table {
     width: 100%;
@@ -720,7 +983,16 @@ select option.maintenance {
     .metrics,
     .grid.two,
     .alerts,
-    .vehicle-map {
+    .vehicle-grid {
         grid-template-columns: 1fr;
+    }
+
+    .vehicle-status-stats {
+        gap: 8px;
+    }
+
+    .vehicle-status-stats .stat-item {
+        font-size: 12px;
+        padding: 3px 10px;
     }
 }
