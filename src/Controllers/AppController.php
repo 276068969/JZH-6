@@ -62,6 +62,7 @@ final class AppController
             'alerts' => $this->repo->alerts(),
             'open_alerts' => $this->repo->openAlerts(),
             'resolved_alerts' => $this->repo->resolvedAlerts(),
+            'status_audit_logs' => $this->repo->recentStatusAuditLogs(20),
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
         ]);
@@ -89,13 +90,19 @@ final class AppController
     public function createCase(): void
     {
         Auth::requireLogin();
-        $result = $this->repo->createCaseWithDispatch([
-            'patient_name' => trim($_POST['patient_name'] ?? '待确认'),
-            'priority' => $_POST['priority'] ?? 'medium',
-            'address' => trim($_POST['address'] ?? ''),
-            'status' => $_POST['status'] ?? 'reported',
-            'assigned_ambulance' => trim($_POST['assigned_ambulance'] ?? ''),
-        ]);
+        $user = Auth::user();
+        $result = $this->repo->createCaseWithDispatch(
+            [
+                'patient_name' => trim($_POST['patient_name'] ?? '待确认'),
+                'priority' => $_POST['priority'] ?? 'medium',
+                'address' => trim($_POST['address'] ?? ''),
+                'status' => $_POST['status'] ?? 'reported',
+                'assigned_ambulance' => trim($_POST['assigned_ambulance'] ?? ''),
+            ],
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
+        );
 
         if (!$result['success']) {
             $this->setFlash('errors', $result['errors']);
@@ -113,10 +120,14 @@ final class AppController
     public function updateAmbulance(): void
     {
         Auth::requireLogin();
+        $user = Auth::user();
         $result = $this->repo->updateAmbulanceWithLinkage(
             (int) ($_POST['id'] ?? 0),
             $_POST['status'] ?? 'standby',
-            trim($_POST['location'] ?? '')
+            trim($_POST['location'] ?? ''),
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
         );
 
         if (!$result['success']) {

@@ -231,7 +231,135 @@ final class DashboardRepository
         return ['available' => true, 'ambulance' => $ambulance];
     }
 
-    public function createCaseWithDispatch(array $data): array
+    public function ambulanceDispatchCheckApi(string $code): array
+    {
+        return $this->isAmbulanceAvailable($code);
+    }
+
+    public function logAmbulanceStatusChange(
+        int $ambulanceId,
+        string $ambulanceCode,
+        string $oldStatus,
+        string $newStatus,
+        ?string $oldLocation,
+        ?string $newLocation,
+        int $changedBy,
+        string $operatorName,
+        string $operatorRole,
+        string $changeType = 'manual',
+        ?string $relatedCaseNo = null
+    ): void {
+        $stmt = $this->db->prepare(
+            'INSERT INTO ambulance_status_audit 
+             (ambulance_id, ambulance_code, old_status, new_status, 
+              old_location, new_location, changed_by, operator_name, 
+              operator_role, change_type, related_case_no, created_at)
+             VALUES 
+             (:ambulance_id, :ambulance_code, :old_status, :new_status,
+              :old_location, :new_location, :changed_by, :operator_name,
+              :operator_role, :change_type, :related_case_no, NOW())'
+        );
+        $stmt->execute([
+            'ambulance_id' => $ambulanceId,
+            'ambulance_code' => $ambulanceCode,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'old_location' => $oldLocation,
+            'new_location' => $newLocation,
+            'changed_by' => $changedBy,
+            'operator_name' => $operatorName,
+            'operator_role' => $operatorRole,
+            'change_type' => $changeType,
+            'related_case_no' => $relatedCaseNo,
+        ]);
+    }
+
+    public function recentStatusAuditLogs(int $limit = 20): array
+    {
+        $sql = 'SELECT * FROM ambulance_status_audit 
+                 ORDER BY created_at DESC 
+                 LIMIT :limit';
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    public function updateAmbulanceWithLinkage(
+        int $id,
+        string $status,
+        string $location,
+        int $changedBy,
+        string $operatorName,
+        string $operatorRole
+    ): array {
+        $warnings = [];
+
+        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $ambulance = $stmt->fetch();
+        if (!$ambulance) {
+            return ['success' => false, 'errors' => ['车辆不存在']];
+        }
+
+        $oldStatus = $ambulance['status'];
+        $oldLocation = $ambulance['location'];
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
+            $stmt->execute([
+                'id' => $id,
+                'status' => $status,
+                'location' => $location,
+            ]);
+
+            if ($oldStatus !== $status || $oldLocation !== $location) {
+                $this->logAmbulanceStatusChange(
+                    $id,
+                    $ambulance['code'],
+                    $oldStatus,
+                    $status,
+                    $oldLocation,
+                    $location,
+                    $changedBy,
+                    $operatorName,
+                    $operatorRole,
+                    'manual'
+                );
+            }
+
+            if ($status === 'standby') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => $ambulance['code']]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '提示：车辆设为待命，但事件 ' . $activeCase['case_no'] . ' 尚未关闭，请确认是否需要结案。';
+                }
+            }
+
+            if ($status === 'maintenance') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => $ambulance['code']]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '警告：车辆设为检修，但仍有关联进行中事件 ' . $activeCase['case_no'] . '，请重新调度。';
+                }
+            }
+
+            $this->db->commit();
+            return ['success' => true, 'warnings' => $warnings];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function createCaseWithDispatch(array $data, int $changedBy, string $operatorName, string $operatorRole): array
     {
         $warnings = [];
         $errors = [];
@@ -283,11 +411,31 @@ final class DashboardRepository
             ]);
 
             if ($hasAmbulance && $data['status'] !== 'closed') {
+                $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+                $stmt->execute(['code' => $data['assigned_ambulance']]);
+                $ambulance = $stmt->fetch();
+
                 $stmt = $this->db->prepare('UPDATE ambulances SET status = :target_status, updated_at = NOW() WHERE code = :code');
                 $stmt->execute([
                     'code' => $data['assigned_ambulance'],
                     'target_status' => $targetVehicleStatus,
                 ]);
+
+                if ($ambulance && $ambulance['status'] !== $targetVehicleStatus) {
+                    $this->logAmbulanceStatusChange(
+                        (int)$ambulance['id'],
+                        $ambulance['code'],
+                        $ambulance['status'],
+                        $targetVehicleStatus,
+                        $ambulance['location'],
+                        $ambulance['location'],
+                        $changedBy,
+                        $operatorName,
+                        $operatorRole,
+                        'dispatch',
+                        $caseNo
+                    );
+                }
 
                 $dispatchInfo = [
                     'vehicle_code' => $data['assigned_ambulance'],
@@ -316,60 +464,5 @@ final class DashboardRepository
             $this->db->rollBack();
             return ['success' => false, 'errors' => ['保存失败：' . $e->getMessage()]];
         }
-    }
-
-    public function updateAmbulanceWithLinkage(int $id, string $status, string $location): array
-    {
-        $warnings = [];
-
-        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
-        $stmt->execute(['id' => $id]);
-        $ambulance = $stmt->fetch();
-        if (!$ambulance) {
-            return ['success' => false, 'errors' => ['车辆不存在']];
-        }
-
-        $this->db->beginTransaction();
-        try {
-            $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
-            $stmt->execute([
-                'id' => $id,
-                'status' => $status,
-                'location' => $location,
-            ]);
-
-            if ($status === 'standby') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
-                                             WHERE assigned_ambulance = :code AND status != "closed" 
-                                             ORDER BY created_at DESC LIMIT 1');
-                $stmt->execute(['code' => $ambulance['code']]);
-                $activeCase = $stmt->fetch();
-                if ($activeCase) {
-                    $warnings[] = '提示：车辆设为待命，但事件 ' . $activeCase['case_no'] . ' 尚未关闭，请确认是否需要结案。';
-                }
-            }
-
-            if ($status === 'maintenance') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
-                                             WHERE assigned_ambulance = :code AND status != "closed" 
-                                             ORDER BY created_at DESC LIMIT 1');
-                $stmt->execute(['code' => $ambulance['code']]);
-                $activeCase = $stmt->fetch();
-                if ($activeCase) {
-                    $warnings[] = '警告：车辆设为检修，但仍有关联进行中事件 ' . $activeCase['case_no'] . '，请重新调度。';
-                }
-            }
-
-            $this->db->commit();
-            return ['success' => true, 'warnings' => $warnings];
-        } catch (\Throwable $e) {
-            $this->db->rollBack();
-            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
-        }
-    }
-
-    public function ambulanceDispatchCheckApi(string $code): array
-    {
-        return $this->isAmbulanceAvailable($code);
     }
 }

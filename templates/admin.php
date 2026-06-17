@@ -378,6 +378,85 @@
     </div>
 </section>
 
+<section class="panel audit-panel">
+    <div class="panel-head">
+        <h2>车辆状态变更审计</h2>
+        <span>操作留痕 · 调度追溯 · 监管审计</span>
+    </div>
+    <?php if (empty($status_audit_logs)): ?>
+        <div class="alerts-empty muted">
+            <p>暂无车辆状态变更记录</p>
+        </div>
+    <?php else: ?>
+        <div class="audit-log-list">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>车辆</th>
+                        <th>状态变更</th>
+                        <th>位置变更</th>
+                        <th>操作人</th>
+                        <th>变更类型</th>
+                        <th>关联事件</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($status_audit_logs as $log): ?>
+                        <tr class="audit-log-row">
+                            <td class="audit-time">
+                                <span class="audit-time-date"><?= h(date('Y-m-d', strtotime($log['created_at']))) ?></span>
+                                <span class="audit-time-time"><?= h(date('H:i:s', strtotime($log['created_at']))) ?></span>
+                            </td>
+                            <td class="audit-vehicle">
+                                <strong><?= h($log['ambulance_code']) ?></strong>
+                            </td>
+                            <td class="audit-status">
+                                <div class="status-transition">
+                                    <span class="status-tag-small status-<?= $log['old_status'] ?>"><?= statusText($log['old_status']) ?></span>
+                                    <span class="transition-arrow">→</span>
+                                    <span class="status-tag-small status-<?= $log['new_status'] ?>"><?= statusText($log['new_status']) ?></span>
+                                </div>
+                            </td>
+                            <td class="audit-location">
+                                <?php if ($log['old_location'] !== $log['new_location']): ?>
+                                    <div class="location-change">
+                                        <span class="location-old muted"><?= h($log['old_location']) ?></span>
+                                        <span class="transition-arrow">→</span>
+                                        <span class="location-new"><?= h($log['new_location']) ?></span>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="muted"><?= h($log['new_location']) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="audit-operator">
+                                <div class="operator-info">
+                                    <strong><?= h($log['operator_name']) ?></strong>
+                                    <small class="muted">(<?= h($log['operator_role']) ?>)</small>
+                                </div>
+                            </td>
+                            <td class="audit-type">
+                                <?php if ($log['change_type'] === 'dispatch'): ?>
+                                    <span class="audit-type-tag dispatch">派车联动</span>
+                                <?php else: ?>
+                                    <span class="audit-type-tag manual">手动更新</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="audit-case">
+                                <?php if (!empty($log['related_case_no'])): ?>
+                                    <span class="case-link"><?= h($log['related_case_no']) ?></span>
+                                <?php else: ?>
+                                    <span class="muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+
 <script>
 (function() {
     var select = document.getElementById('assigned_ambulance');
