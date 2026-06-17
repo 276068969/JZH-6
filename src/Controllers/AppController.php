@@ -60,9 +60,30 @@ final class AppController
             'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
             'cases' => $this->repo->casesWithAmbulanceInfo(),
             'alerts' => $this->repo->alerts(),
+            'open_alerts' => $this->repo->openAlerts(),
+            'resolved_alerts' => $this->repo->resolvedAlerts(),
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
         ]);
+    }
+
+    public function handleAlert(): void
+    {
+        Auth::requireLogin();
+        $alertId = (int) ($_POST['alert_id'] ?? 0);
+        $handlingNotes = trim($_POST['handling_notes'] ?? '');
+        $user = Auth::user();
+
+        $result = $this->repo->handleAlert($alertId, $handlingNotes, (int) $user['id']);
+
+        if (!$result['success']) {
+            $this->setFlash('errors', $result['errors']);
+        } else {
+            $messages = ['告警「' . $result['alert']['title'] . '」已处置关闭'];
+            $this->setFlash('success', $messages);
+        }
+
+        header('Location: /admin');
     }
 
     public function createCase(): void

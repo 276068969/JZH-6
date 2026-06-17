@@ -290,6 +290,94 @@
     </div>
 </section>
 
+<section class="panel alerts-panel">
+    <div class="panel-head">
+        <h2>风险告警处置</h2>
+        <span>监管发现 · 后台处置 · 前台同步</span>
+    </div>
+    <div class="alerts-section">
+        <div class="alerts-open-section">
+            <div class="alerts-section-head">
+                <h3>未处理告警 <span class="alert-count-badge"><?= count($open_alerts) ?></span></h3>
+            </div>
+            <?php if (empty($open_alerts)): ?>
+                <div class="alerts-empty">
+                    <span class="empty-icon">✓</span>
+                    <p>当前暂无未处理告警，系统运行正常</p>
+                </div>
+            <?php else: ?>
+                <div class="alerts-open-list">
+                    <?php foreach ($open_alerts as $alert): ?>
+                        <article class="alert-card alert-open">
+                            <div class="alert-card-head">
+                                <div class="alert-title-row">
+                                    <span class="alert-priority-dot"></span>
+                                    <h4><?= h($alert['title']) ?></h4>
+                                    <span class="status-tag status-open">未处理</span>
+                                </div>
+                                <div class="alert-meta">
+                                    <span class="alert-time">告警时间：<?= h($alert['created_at']) ?></span>
+                                </div>
+                            </div>
+                            <div class="alert-card-body">
+                                <p class="alert-description"><?= h($alert['description']) ?></p>
+                                <form class="alert-handle-form" method="post" action="/admin/alerts/handle">
+                                    <input type="hidden" name="alert_id" value="<?= (int) $alert['id'] ?>">
+                                    <label>
+                                        <span>处置说明</span>
+                                        <textarea name="handling_notes" rows="2" placeholder="请填写处置措施、原因分析或跟进结果..." required></textarea>
+                                    </label>
+                                    <div class="alert-form-actions">
+                                        <button type="submit" class="btn-handle">确认处置并关闭告警</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <div class="alerts-resolved-section">
+            <div class="alerts-section-head">
+                <h3>已处理告警 <span class="alert-count-badge resolved"><?= count($resolved_alerts) ?></span></h3>
+            </div>
+            <?php if (empty($resolved_alerts)): ?>
+                <div class="alerts-empty muted">
+                    <p>暂无已处理记录</p>
+                </div>
+            <?php else: ?>
+                <div class="alerts-resolved-list">
+                    <?php foreach ($resolved_alerts as $alert): ?>
+                        <article class="alert-card alert-resolved">
+                            <div class="alert-card-head">
+                                <div class="alert-title-row">
+                                    <h4><?= h($alert['title']) ?></h4>
+                                    <span class="status-tag status-resolved">已处理</span>
+                                </div>
+                                <div class="alert-meta">
+                                    <span class="alert-time">告警：<?= h($alert['created_at']) ?></span>
+                                    <span class="alert-handle-info">
+                                        处置人：<strong><?= h($alert['handler_name'] ?? '系统') ?></strong>
+                                        · <?= h($alert['handled_at']) ?>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="alert-card-body">
+                                <p class="alert-description"><?= h($alert['description']) ?></p>
+                                <div class="alert-handling-notes">
+                                    <span class="handling-notes-label">处置说明：</span>
+                                    <span class="handling-notes-content"><?= h($alert['handling_notes']) ?></span>
+                                </div>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</section>
+
 <script>
 (function() {
     var select = document.getElementById('assigned_ambulance');

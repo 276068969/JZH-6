@@ -33,6 +33,8 @@ try {
         $controller->createCase();
     } elseif ($path === '/admin/ambulances' && $method === 'POST') {
         $controller->updateAmbulance();
+    } elseif ($path === '/admin/alerts/handle' && $method === 'POST') {
+        $controller->handleAlert();
     } elseif ($path === '/api/overview' && $method === 'GET') {
         $controller->overviewApi();
     } elseif ($path === '/api/dispatch-check' && $method === 'GET') {

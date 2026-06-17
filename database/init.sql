@@ -39,7 +39,11 @@ CREATE TABLE IF NOT EXISTS alerts (
     title VARCHAR(120) NOT NULL,
     description VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'open',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    handling_notes TEXT NULL,
+    handled_by INT NULL,
+    handled_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 INSERT INTO users (username, password_hash, name, role, status) VALUES

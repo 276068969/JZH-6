@@ -122,18 +122,165 @@
 <section class="panel">
     <div class="panel-head">
         <h2>风险告警</h2>
-        <span>设备、响应、轨迹异常</span>
+        <div class="alerts-refresh-info">
+            <span>设备、响应、轨迹异常</span>
+            <span class="refresh-indicator" id="refresh-indicator" title="每 30 秒自动刷新">
+                <span class="refresh-dot"></span>
+                <span id="refresh-time">实时同步中</span>
+            </span>
+        </div>
     </div>
-    <div class="alerts">
+    <div class="alerts front-alerts" id="front-alerts">
         <?php foreach ($alerts as $alert): ?>
-            <article>
-                <b><?= h($alert['title']) ?></b>
-                <span><?= statusText($alert['status']) ?></span>
-                <p><?= h($alert['description']) ?></p>
+            <?php $isOpen = $alert['status'] === 'open'; ?>
+            <article class="front-alert <?= $isOpen ? 'alert-status-open' : 'alert-status-resolved' ?>" data-alert-id="<?= (int) $alert['id'] ?>">
+                <div class="front-alert-head">
+                    <b class="front-alert-title"><?= h($alert['title']) ?></b>
+                    <span class="status-tag <?= statusClass($alert['status']) ?>"><?= statusText($alert['status']) ?></span>
+                </div>
+                <p class="front-alert-desc"><?= h($alert['description']) ?></p>
+                <div class="front-alert-footer">
+                    <span class="alert-created"><?= h($alert['created_at']) ?></span>
+                    <?php if (!$isOpen && !empty($alert['handler_name'])): ?>
+                        <span class="alert-handled-by">处置人：<?= h($alert['handler_name']) ?></span>
+                    <?php endif; ?>
+                </div>
             </article>
         <?php endforeach; ?>
     </div>
 </section>
+
+<script>
+(function() {
+    var metricsSection = document.querySelector('.metrics');
+    var alertsContainer = document.getElementById('front-alerts');
+    var refreshIndicator = document.getElementById('refresh-indicator');
+    var refreshTime = document.getElementById('refresh-time');
+    var statusTextMap = {
+        'standby': '待命',
+        'dispatching': '出车',
+        'on_scene': '现场处置',
+        'transporting': '转运中',
+        'maintenance': '检修',
+        'reported': '已上报',
+        'accepted': '已受理',
+        'closed': '已关闭',
+        'open': '未处理',
+        'resolved': '已处理'
+    };
+    var statusClassMap = {
+        'open': 'status-open',
+        'resolved': 'status-resolved'
+    };
+
+    function updateAlertsCount(count) {
+        if (!metricsSection) return;
+        var metricsDivs = metricsSection.querySelectorAll('div');
+        if (metricsDivs.length >= 4) {
+            var alertMetric = metricsDivs[3];
+            var strongEl = alertMetric.querySelector('strong');
+            if (strongEl) {
+                var oldCount = parseInt(strongEl.textContent, 10);
+                if (oldCount !== count) {
+                    strongEl.textContent = count;
+                    alertMetric.style.transition = 'background-color 0.3s';
+                    alertMetric.style.backgroundColor = '#fef3c7';
+                    setTimeout(function() {
+                        alertMetric.style.backgroundColor = '';
+                    }, 1500);
+                }
+            }
+        }
+    }
+
+    function renderAlerts(alerts) {
+        if (!alertsContainer) return;
+        alertsContainer.innerHTML = '';
+        alerts.forEach(function(alert) {
+            var isOpen = alert.status === 'open';
+            var article = document.createElement('article');
+            article.className = 'front-alert ' + (isOpen ? 'alert-status-open' : 'alert-status-resolved');
+            article.setAttribute('data-alert-id', alert.id);
+
+            var head = document.createElement('div');
+            head.className = 'front-alert-head';
+
+            var title = document.createElement('b');
+            title.className = 'front-alert-title';
+            title.textContent = alert.title;
+
+            var status = document.createElement('span');
+            status.className = 'status-tag ' + (statusClassMap[alert.status] || '');
+            status.textContent = statusTextMap[alert.status] || alert.status;
+
+            head.appendChild(title);
+            head.appendChild(status);
+
+            var desc = document.createElement('p');
+            desc.className = 'front-alert-desc';
+            desc.textContent = alert.description;
+
+            var footer = document.createElement('div');
+            footer.className = 'front-alert-footer';
+
+            var created = document.createElement('span');
+            created.className = 'alert-created';
+            created.textContent = alert.created_at;
+            footer.appendChild(created);
+
+            if (!isOpen && alert.handler_name) {
+                var handledBy = document.createElement('span');
+                handledBy.className = 'alert-handled-by';
+                handledBy.textContent = '处置人：' + alert.handler_name;
+                footer.appendChild(handledBy);
+            }
+
+            article.appendChild(head);
+            article.appendChild(desc);
+            article.appendChild(footer);
+            alertsContainer.appendChild(article);
+        });
+    }
+
+    function refreshData() {
+        if (refreshIndicator) {
+            refreshIndicator.classList.add('refreshing');
+        }
+        fetch('/api/overview', { cache: 'no-store' })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.overview && typeof data.overview.alerts !== 'undefined') {
+                    updateAlertsCount(parseInt(data.overview.alerts, 10));
+                }
+                if (data.alerts) {
+                    renderAlerts(data.alerts);
+                }
+                var now = new Date();
+                var timeStr = now.getHours().toString().padStart(2, '0') + ':' +
+                              now.getMinutes().toString().padStart(2, '0') + ':' +
+                              now.getSeconds().toString().padStart(2, '0');
+                if (refreshTime) {
+                    refreshTime.textContent = '更新于 ' + timeStr;
+                }
+            })
+            .catch(function(err) {
+                console.error('刷新数据失败:', err);
+                if (refreshTime) {
+                    refreshTime.textContent = '刷新失败';
+                }
+            })
+            .finally(function() {
+                if (refreshIndicator) {
+                    setTimeout(function() {
+                        refreshIndicator.classList.remove('refreshing');
+                    }, 500);
+                }
+            });
+    }
+
+    setInterval(refreshData, 30000);
+})();
+</script>
 <?php
 $content = ob_get_clean();
 $title = '前台态势 - 救护车监管平台';

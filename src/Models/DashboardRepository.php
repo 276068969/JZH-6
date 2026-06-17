@@ -38,7 +38,77 @@ final class DashboardRepository
 
     public function alerts(): array
     {
-        return $this->db->query('SELECT * FROM alerts ORDER BY created_at DESC LIMIT 8')->fetchAll();
+        $sql = 'SELECT a.*, u.name as handler_name 
+                FROM alerts a 
+                LEFT JOIN users u ON a.handled_by = u.id 
+                ORDER BY a.created_at DESC LIMIT 12';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function openAlerts(): array
+    {
+        $sql = 'SELECT a.*, u.name as handler_name 
+                FROM alerts a 
+                LEFT JOIN users u ON a.handled_by = u.id 
+                WHERE a.status = "open" 
+                ORDER BY a.created_at DESC';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function resolvedAlerts(): array
+    {
+        $sql = 'SELECT a.*, u.name as handler_name 
+                FROM alerts a 
+                LEFT JOIN users u ON a.handled_by = u.id 
+                WHERE a.status = "resolved" 
+                ORDER BY a.handled_at DESC LIMIT 10';
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    public function handleAlert(int $id, string $handlingNotes, int $handledBy): array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM alerts WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $alert = $stmt->fetch();
+
+        if (!$alert) {
+            return ['success' => false, 'errors' => ['告警不存在']];
+        }
+
+        if ($alert['status'] === 'resolved') {
+            return ['success' => false, 'errors' => ['该告警已处理，无需重复处置']];
+        }
+
+        $notes = trim($handlingNotes);
+        if ($notes === '') {
+            return ['success' => false, 'errors' => ['请填写处置说明']];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare(
+                'UPDATE alerts 
+                 SET status = "resolved", 
+                     handling_notes = :notes, 
+                     handled_by = :handled_by, 
+                     handled_at = NOW() 
+                 WHERE id = :id'
+            );
+            $stmt->execute([
+                'id' => $id,
+                'notes' => $notes,
+                'handled_by' => $handledBy,
+            ]);
+
+            $this->db->commit();
+            return [
+                'success' => true,
+                'alert' => $alert,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['处置失败：' . $e->getMessage()]];
+        }
     }
 
     private function generateCaseNo(): string
