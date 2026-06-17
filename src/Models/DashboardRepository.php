@@ -41,20 +41,47 @@ final class DashboardRepository
         return $this->db->query('SELECT * FROM alerts ORDER BY created_at DESC LIMIT 8')->fetchAll();
     }
 
+    private function generateCaseNo(): string
+    {
+        $prefix = 'CASE' . date('Ymd');
+
+        $stmt = $this->db->prepare(
+            'SELECT MAX(case_no) FROM emergency_cases WHERE case_no LIKE :prefix FOR UPDATE'
+        );
+        $stmt->execute(['prefix' => $prefix . '%']);
+        $maxCaseNo = $stmt->fetchColumn();
+
+        if ($maxCaseNo && str_starts_with($maxCaseNo, $prefix)) {
+            $seq = (int) substr($maxCaseNo, strlen($prefix)) + 1;
+        } else {
+            $seq = 1;
+        }
+
+        return $prefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+    }
+
     public function createCase(array $data): void
     {
-        $stmt = $this->db->prepare(
-            'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
-             VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
-        );
-        $stmt->execute([
-            'case_no' => 'CASE' . date('YmdHis'),
-            'patient_name' => $data['patient_name'],
-            'priority' => $data['priority'],
-            'address' => $data['address'],
-            'status' => $data['status'],
-            'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
-        ]);
+        $this->db->beginTransaction();
+        try {
+            $caseNo = $this->generateCaseNo();
+            $stmt = $this->db->prepare(
+                'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
+                 VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
+            );
+            $stmt->execute([
+                'case_no' => $caseNo,
+                'patient_name' => $data['patient_name'],
+                'priority' => $data['priority'],
+                'address' => $data['address'],
+                'status' => $data['status'],
+                'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
+            ]);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     public function updateAmbulance(int $id, string $status, string $location): void
@@ -172,7 +199,7 @@ final class DashboardRepository
                  (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance,
                   :dispatch_vehicle_status, :dispatched_at, NOW())'
             );
-            $caseNo = 'CASE' . date('YmdHis');
+            $caseNo = $this->generateCaseNo();
             $hasAmbulance = !empty($data['assigned_ambulance']);
             $stmt->execute([
                 'case_no' => $caseNo,
