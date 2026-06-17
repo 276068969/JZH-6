@@ -102,17 +102,60 @@
         <h2>急救事件</h2>
         <span>最近 12 条</span>
     </div>
-    <table>
+    <table class="case-table-front">
         <thead>
-            <tr><th>编号</th><th>级别</th><th>状态</th><th>车辆</th></tr>
+            <tr>
+                <th class="col-case-no">编号</th>
+                <th class="col-priority">级别</th>
+                <th class="col-address">地址</th>
+                <th class="col-status">状态</th>
+                <th class="col-ambulance">车辆</th>
+            </tr>
         </thead>
         <tbody>
         <?php foreach ($cases as $case): ?>
-            <tr>
-                <td><?= h($case['case_no']) ?></td>
-                <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
-                <td><?= statusText($case['status']) ?></td>
-                <td><?= h($case['assigned_ambulance'] ?: '待派车') ?></td>
+            <?php
+                $isClosed = $case['status'] === 'closed';
+                $hasAmbulance = !empty($case['assigned_ambulance']);
+            ?>
+            <tr class="case-row case-status-<?= h($case['status']) ?><?= $isClosed ? ' case-row-closed' : '' ?>">
+                <td class="col-case-no">
+                    <span class="case-no-text"><?= h($case['case_no']) ?></span>
+                </td>
+                <td class="col-priority">
+                    <span class="priority-badge priority-<?= h($case['priority']) ?>">
+                        <span class="priority-dot"></span>
+                        <?= priorityText($case['priority']) ?>级
+                    </span>
+                </td>
+                <td class="col-address">
+                    <span class="address-text" title="<?= h($case['address'] ?? '') ?>">
+                        <?= h($case['address'] ?? '—') ?>
+                    </span>
+                </td>
+                <td class="col-status">
+                    <span class="status-tag <?= statusClass($case['status']) ?>">
+                        <?= statusText($case['status']) ?>
+                    </span>
+                </td>
+                <td class="col-ambulance">
+                    <?php if ($isClosed): ?>
+                        <span class="ambulance-info ambulance-closed">
+                            <span class="ambulance-icon">✓</span>
+                            <span class="ambulance-text">已结案</span>
+                        </span>
+                    <?php elseif ($hasAmbulance): ?>
+                        <span class="ambulance-info ambulance-assigned">
+                            <span class="ambulance-icon">🚑</span>
+                            <span class="ambulance-code"><?= h($case['assigned_ambulance']) ?></span>
+                        </span>
+                    <?php else: ?>
+                        <span class="ambulance-info ambulance-pending">
+                            <span class="ambulance-icon">⏳</span>
+                            <span class="ambulance-text">待派车</span>
+                        </span>
+                    <?php endif; ?>
+                </td>
             </tr>
         <?php endforeach; ?>
         </tbody>

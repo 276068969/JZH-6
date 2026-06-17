@@ -2004,3 +2004,232 @@ select option.maintenance {
         gap: 4px;
     }
 }
+
+.case-table-front {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.case-table-front th,
+.case-table-front td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.case-table-front th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 12px;
+    background: #f8fafc;
+    position: sticky;
+    top: 0;
+}
+
+.case-table-front .col-case-no {
+    width: 130px;
+    font-family: Consolas, monospace;
+}
+
+.case-table-front .col-priority {
+    width: 70px;
+}
+
+.case-table-front .col-address {
+    min-width: 200px;
+}
+
+.case-table-front .col-status {
+    width: 100px;
+}
+
+.case-table-front .col-ambulance {
+    width: 130px;
+}
+
+.case-table-front .case-no-text {
+    font-family: Consolas, monospace;
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 13px;
+}
+
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.priority-badge .priority-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 0.9;
+}
+
+.priority-badge.priority-high {
+    background: linear-gradient(135deg, #dc2626, #c2410c);
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.priority-badge.priority-high .priority-dot {
+    animation: priority-pulse 1.5s ease-in-out infinite;
+}
+
+.priority-badge.priority-medium {
+    background: linear-gradient(135deg, #d97706, #b7791f);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+}
+
+.priority-badge.priority-low {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+
+@keyframes priority-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+}
+
+.address-text {
+    display: block;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+    font-size: 13px;
+    cursor: help;
+}
+
+.ambulance-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.ambulance-info .ambulance-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.ambulance-info.ambulance-assigned {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.ambulance-info.ambulance-assigned .ambulance-code {
+    font-family: Consolas, monospace;
+    font-weight: 700;
+}
+
+.ambulance-info.ambulance-pending {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.ambulance-info.ambulance-pending .ambulance-icon {
+    animation: waiting-bounce 1.5s ease-in-out infinite;
+}
+
+.ambulance-info.ambulance-closed {
+    background: #f1f5f9;
+    color: var(--muted);
+    border: 1px solid var(--line);
+}
+
+@keyframes waiting-bounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(2px); }
+}
+
+.case-table-front .case-row {
+    transition: background-color 0.2s ease;
+}
+
+.case-table-front .case-row:hover {
+    background: #f8fafc;
+}
+
+.case-table-front .case-row.case-row-closed {
+    opacity: 0.7;
+}
+
+.case-table-front .case-row.case-row-closed:hover {
+    opacity: 0.9;
+}
+
+.case-table-front .case-row.case-row-closed .case-no-text {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
+.case-table-front .case-row.case-status-reported .col-status .status-tag,
+.case-table-front .case-row.case-status-accepted .col-status .status-tag {
+    animation: status-active-glow 2s ease-in-out infinite;
+}
+
+@keyframes status-active-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(15, 159, 143, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(15, 159, 143, 0); }
+}
+
+@media (max-width: 880px) {
+    .case-table-front .col-address {
+        display: none;
+    }
+
+    .case-table-front th,
+    .case-table-front td {
+        padding: 10px 8px;
+    }
+
+    .address-text {
+        max-width: 150px;
+    }
+}
+
+@media (max-width: 560px) {
+    .case-table-front {
+        font-size: 12px;
+    }
+
+    .case-table-front .col-priority,
+    .case-table-front .col-status {
+        width: auto;
+    }
+
+    .priority-badge {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .ambulance-info {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .status-tag {
+        padding: 2px 8px;
+        font-size: 11px;
+    }
+}
