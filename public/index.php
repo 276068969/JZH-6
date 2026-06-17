@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/Core/Database.php';
+require_once __DIR__ . '/../src/Core/MigrationRunner.php';
 require_once __DIR__ . '/../src/Core/Auth.php';
 require_once __DIR__ . '/../src/Core/View.php';
 require_once __DIR__ . '/../templates/helpers.php';

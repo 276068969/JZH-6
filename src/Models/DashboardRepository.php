@@ -236,6 +236,20 @@ final class DashboardRepository
         return $this->isAmbulanceAvailable($code);
     }
 
+    private function isAuditTableExists(): bool
+    {
+        try {
+            $stmt = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.tables 
+                 WHERE table_schema = DATABASE() 
+                 AND table_name = 'ambulance_status_audit'"
+            );
+            return (int)$stmt->fetchColumn() > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function logAmbulanceStatusChange(
         int $ambulanceId,
         string $ambulanceCode,
@@ -249,40 +263,62 @@ final class DashboardRepository
         string $changeType = 'manual',
         ?string $relatedCaseNo = null
     ): void {
-        $stmt = $this->db->prepare(
-            'INSERT INTO ambulance_status_audit 
-             (ambulance_id, ambulance_code, old_status, new_status, 
-              old_location, new_location, changed_by, operator_name, 
-              operator_role, change_type, related_case_no, created_at)
-             VALUES 
-             (:ambulance_id, :ambulance_code, :old_status, :new_status,
-              :old_location, :new_location, :changed_by, :operator_name,
-              :operator_role, :change_type, :related_case_no, NOW())'
-        );
-        $stmt->execute([
-            'ambulance_id' => $ambulanceId,
-            'ambulance_code' => $ambulanceCode,
-            'old_status' => $oldStatus,
-            'new_status' => $newStatus,
-            'old_location' => $oldLocation,
-            'new_location' => $newLocation,
-            'changed_by' => $changedBy,
-            'operator_name' => $operatorName,
-            'operator_role' => $operatorRole,
-            'change_type' => $changeType,
-            'related_case_no' => $relatedCaseNo,
-        ]);
+        try {
+            if (!$this->isAuditTableExists()) {
+                return;
+            }
+
+            $stmt = $this->db->prepare(
+                'INSERT INTO ambulance_status_audit 
+                 (ambulance_id, ambulance_code, old_status, new_status, 
+                  old_location, new_location, changed_by, operator_name, 
+                  operator_role, change_type, related_case_no, created_at)
+                 VALUES 
+                 (:ambulance_id, :ambulance_code, :old_status, :new_status,
+                  :old_location, :new_location, :changed_by, :operator_name,
+                  :operator_role, :change_type, :related_case_no, NOW())'
+            );
+            $stmt->execute([
+                'ambulance_id' => $ambulanceId,
+                'ambulance_code' => $ambulanceCode,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'old_location' => $oldLocation,
+                'new_location' => $newLocation,
+                'changed_by' => $changedBy,
+                'operator_name' => $operatorName,
+                'operator_role' => $operatorRole,
+                'change_type' => $changeType,
+                'related_case_no' => $relatedCaseNo,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('记录审计日志失败: ' . $e->getMessage());
+        }
+    }
+
+    public function isAuditTableAvailable(): bool
+    {
+        return $this->isAuditTableExists();
     }
 
     public function recentStatusAuditLogs(int $limit = 20): array
     {
-        $sql = 'SELECT * FROM ambulance_status_audit 
-                 ORDER BY created_at DESC 
-                 LIMIT :limit';
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
-        $stmt->execute();
-        return $stmt->fetchAll();
+        try {
+            if (!$this->isAuditTableExists()) {
+                return [];
+            }
+
+            $sql = 'SELECT * FROM ambulance_status_audit 
+                     ORDER BY created_at DESC 
+                     LIMIT :limit';
+            $stmt = $this->db->prepare($sql);
+            $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            error_log('查询审计日志失败: ' . $e->getMessage());
+            return [];
+        }
     }
 
     public function updateAmbulanceWithLinkage(

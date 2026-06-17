@@ -55,6 +55,16 @@ final class AppController
     public function admin(): void
     {
         Auth::requireLogin();
+        
+        $statusAuditLogs = [];
+        $auditTableAvailable = false;
+        try {
+            $auditTableAvailable = $this->repo->isAuditTableAvailable();
+            $statusAuditLogs = $this->repo->recentStatusAuditLogs(20);
+        } catch (\Throwable $e) {
+            error_log('加载审计日志失败: ' . $e->getMessage());
+        }
+        
         View::render('admin', [
             'overview' => $this->repo->overview(),
             'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
@@ -62,7 +72,8 @@ final class AppController
             'alerts' => $this->repo->alerts(),
             'open_alerts' => $this->repo->openAlerts(),
             'resolved_alerts' => $this->repo->resolvedAlerts(),
-            'status_audit_logs' => $this->repo->recentStatusAuditLogs(20),
+            'status_audit_logs' => $statusAuditLogs,
+            'audit_table_available' => $auditTableAvailable,
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
         ]);

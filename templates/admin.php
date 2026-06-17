@@ -383,7 +383,15 @@
         <h2>车辆状态变更审计</h2>
         <span>操作留痕 · 调度追溯 · 监管审计</span>
     </div>
-    <?php if (empty($status_audit_logs)): ?>
+    <?php if (empty($audit_table_available)): ?>
+        <div class="alerts-empty">
+            <p class="muted">⚠ 审计功能待初始化</p>
+            <p class="muted" style="font-size: 12px; margin-top: 6px;">
+                数据库表 <code>ambulance_status_audit</code> 尚未创建，系统已触发自动迁移。
+                请刷新页面或联系管理员执行迁移脚本。
+            </p>
+        </div>
+    <?php elseif (empty($status_audit_logs)): ?>
         <div class="alerts-empty muted">
             <p>暂无车辆状态变更记录</p>
         </div>
@@ -405,38 +413,46 @@
                     <?php foreach ($status_audit_logs as $log): ?>
                         <tr class="audit-log-row">
                             <td class="audit-time">
-                                <span class="audit-time-date"><?= h(date('Y-m-d', strtotime($log['created_at']))) ?></span>
-                                <span class="audit-time-time"><?= h(date('H:i:s', strtotime($log['created_at']))) ?></span>
+                                <span class="audit-time-date"><?= h(date('Y-m-d', strtotime($log['created_at'] ?? ''))) ?></span>
+                                <span class="audit-time-time"><?= h(date('H:i:s', strtotime($log['created_at'] ?? ''))) ?></span>
                             </td>
                             <td class="audit-vehicle">
-                                <strong><?= h($log['ambulance_code']) ?></strong>
+                                <strong><?= h($log['ambulance_code'] ?? '—') ?></strong>
                             </td>
                             <td class="audit-status">
                                 <div class="status-transition">
-                                    <span class="status-tag-small status-<?= $log['old_status'] ?>"><?= statusText($log['old_status']) ?></span>
+                                    <?php 
+                                        $oldStatus = $log['old_status'] ?? 'unknown';
+                                        $newStatus = $log['new_status'] ?? 'unknown';
+                                    ?>
+                                    <span class="status-tag-small status-<?= $oldStatus ?>"><?= statusText($oldStatus) ?></span>
                                     <span class="transition-arrow">→</span>
-                                    <span class="status-tag-small status-<?= $log['new_status'] ?>"><?= statusText($log['new_status']) ?></span>
+                                    <span class="status-tag-small status-<?= $newStatus ?>"><?= statusText($newStatus) ?></span>
                                 </div>
                             </td>
                             <td class="audit-location">
-                                <?php if ($log['old_location'] !== $log['new_location']): ?>
+                                <?php 
+                                    $oldLoc = $log['old_location'] ?? null;
+                                    $newLoc = $log['new_location'] ?? null;
+                                ?>
+                                <?php if ($oldLoc !== $newLoc): ?>
                                     <div class="location-change">
-                                        <span class="location-old muted"><?= h($log['old_location']) ?></span>
+                                        <span class="location-old muted"><?= h($oldLoc ?? '') ?></span>
                                         <span class="transition-arrow">→</span>
-                                        <span class="location-new"><?= h($log['new_location']) ?></span>
+                                        <span class="location-new"><?= h($newLoc ?? '') ?></span>
                                     </div>
                                 <?php else: ?>
-                                    <span class="muted"><?= h($log['new_location']) ?></span>
+                                    <span class="muted"><?= h($newLoc ?? '—') ?></span>
                                 <?php endif; ?>
                             </td>
                             <td class="audit-operator">
                                 <div class="operator-info">
-                                    <strong><?= h($log['operator_name']) ?></strong>
-                                    <small class="muted">(<?= h($log['operator_role']) ?>)</small>
+                                    <strong><?= h($log['operator_name'] ?? '—') ?></strong>
+                                    <small class="muted">(<?= h($log['operator_role'] ?? 'unknown') ?>)</small>
                                 </div>
                             </td>
                             <td class="audit-type">
-                                <?php if ($log['change_type'] === 'dispatch'): ?>
+                                <?php if (($log['change_type'] ?? '') === 'dispatch'): ?>
                                     <span class="audit-type-tag dispatch">派车联动</span>
                                 <?php else: ?>
                                     <span class="audit-type-tag manual">手动更新</span>

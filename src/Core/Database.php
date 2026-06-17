@@ -9,6 +9,7 @@ use PDO;
 final class Database
 {
     private static ?PDO $pdo = null;
+    private static bool $migrationsRun = false;
 
     public static function connection(): PDO
     {
@@ -27,8 +28,29 @@ final class Database
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 ]
             );
+
+            self::runMigrationsIfNeeded();
         }
 
         return self::$pdo;
+    }
+
+    private static function runMigrationsIfNeeded(): void
+    {
+        if (self::$migrationsRun) {
+            return;
+        }
+
+        self::$migrationsRun = true;
+
+        try {
+            $migrationsDir = __DIR__ . '/../../database/migrations';
+            if (is_dir($migrationsDir)) {
+                $runner = new MigrationRunner(self::$pdo, $migrationsDir);
+                $runner->runAllPendingMigrations();
+            }
+        } catch (\Throwable $e) {
+            error_log('数据库迁移执行失败: ' . $e->getMessage());
+        }
     }
 }
