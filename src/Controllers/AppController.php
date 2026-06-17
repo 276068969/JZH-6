@@ -156,11 +156,17 @@ final class AppController
     public function overviewApi(): void
     {
         header('Content-Type: application/json; charset=utf-8');
+        $overview = $this->repo->overview();
         echo json_encode([
-            'overview' => $this->repo->overview(),
+            'overview' => $overview,
             'ambulances' => $this->repo->ambulances(),
             'cases' => $this->repo->cases(),
             'alerts' => $this->repo->alerts(),
+            'aggregations' => [
+                'ambulance_by_status' => $overview['ambulance_status_breakdown'],
+                'case_by_priority' => $overview['case_priority_breakdown'],
+                'alert_by_status' => $overview['alert_status_breakdown'],
+            ],
         ], JSON_UNESCAPED_UNICODE);
     }
 

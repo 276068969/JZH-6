@@ -23,7 +23,61 @@ final class DashboardRepository
             'ambulances_online' => (int) $this->db->query('SELECT COUNT(*) FROM ambulances WHERE status IN ("standby", "dispatching", "on_scene", "transporting")')->fetchColumn(),
             'active_cases' => (int) $this->db->query('SELECT COUNT(*) FROM emergency_cases WHERE status != "closed"')->fetchColumn(),
             'alerts' => (int) $this->db->query('SELECT COUNT(*) FROM alerts WHERE status = "open"')->fetchColumn(),
+            'ambulance_status_breakdown' => $this->ambulanceStatusBreakdown(),
+            'case_priority_breakdown' => $this->casePriorityBreakdown(),
+            'alert_status_breakdown' => $this->alertStatusBreakdown(),
         ];
+    }
+
+    public function ambulanceStatusBreakdown(): array
+    {
+        $sql = 'SELECT status, COUNT(*) as count FROM ambulances GROUP BY status';
+        $rows = $this->db->query($sql)->fetchAll();
+        $result = [];
+        foreach ($rows as $row) {
+            $result[$row['status']] = (int) $row['count'];
+        }
+        $allStatuses = ['standby', 'dispatching', 'on_scene', 'transporting', 'maintenance'];
+        foreach ($allStatuses as $status) {
+            if (!isset($result[$status])) {
+                $result[$status] = 0;
+            }
+        }
+        return $result;
+    }
+
+    public function casePriorityBreakdown(): array
+    {
+        $sql = 'SELECT priority, COUNT(*) as count FROM emergency_cases GROUP BY priority';
+        $rows = $this->db->query($sql)->fetchAll();
+        $result = [];
+        foreach ($rows as $row) {
+            $result[$row['priority']] = (int) $row['count'];
+        }
+        $allPriorities = ['high', 'medium', 'low'];
+        foreach ($allPriorities as $priority) {
+            if (!isset($result[$priority])) {
+                $result[$priority] = 0;
+            }
+        }
+        return $result;
+    }
+
+    public function alertStatusBreakdown(): array
+    {
+        $sql = 'SELECT status, COUNT(*) as count FROM alerts GROUP BY status';
+        $rows = $this->db->query($sql)->fetchAll();
+        $result = [];
+        foreach ($rows as $row) {
+            $result[$row['status']] = (int) $row['count'];
+        }
+        $allStatuses = ['open', 'resolved'];
+        foreach ($allStatuses as $status) {
+            if (!isset($result[$status])) {
+                $result[$status] = 0;
+            }
+        }
+        return $result;
     }
 
     public function ambulances(): array
