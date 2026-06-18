@@ -67,11 +67,25 @@
                 </label>
 
                 <?php if (!empty($error)): ?>
-                    <div class="login-error">
+                    <?php
+                        $errorClass = 'login-error';
+                        $errorTitle = '登录失败';
+                        
+                        $specialReasons = [
+                            '账号已被停用' => ['title' => '账号已停用', 'class' => 'login-error disabled'],
+                            '权限不足' => ['title' => '访问受限', 'class' => 'login-error denied'],
+                        ];
+                        
+                        if (isset($specialReasons[$error])) {
+                            $errorTitle = $specialReasons[$error]['title'];
+                            $errorClass = $specialReasons[$error]['class'];
+                        }
+                    ?>
+                    <div class="<?= $errorClass ?>">
                         <span class="error-icon">⚠</span>
                         <div>
-                            <strong>登录失败</strong>
-                            <p><?= h($error) ?>，请检查账号密码或联系管理员开通权限。</p>
+                            <strong><?= h($errorTitle) ?></strong>
+                            <p><?= h($error) ?>，请检查账号状态或联系管理员。</p>
                         </div>
                     </div>
                 <?php endif; ?>

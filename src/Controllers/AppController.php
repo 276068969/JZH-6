@@ -30,6 +30,10 @@ final class AppController
 
     public function loginForm(string $error = ''): void
     {
+        $reason = trim($_GET['reason'] ?? '');
+        if ($reason !== '' && $error === '') {
+            $error = $reason;
+        }
         View::render('login', ['error' => $error]);
     }
 
@@ -54,7 +58,7 @@ final class AppController
 
     public function admin(): void
     {
-        Auth::requireLogin();
+        Auth::requireAdmin();
         
         $statusAuditLogs = [];
         $auditTableAvailable = false;
@@ -81,7 +85,7 @@ final class AppController
 
     public function handleAlert(): void
     {
-        Auth::requireLogin();
+        Auth::requireAdmin();
         $alertId = (int) ($_POST['alert_id'] ?? 0);
         $handlingNotes = trim($_POST['handling_notes'] ?? '');
         $user = Auth::user();
@@ -100,7 +104,7 @@ final class AppController
 
     public function createCase(): void
     {
-        Auth::requireLogin();
+        Auth::requireAdmin();
         $user = Auth::user();
         $result = $this->repo->createCaseWithDispatch(
             [
@@ -130,7 +134,7 @@ final class AppController
 
     public function updateAmbulance(): void
     {
-        Auth::requireLogin();
+        Auth::requireAdmin();
         $user = Auth::user();
         $result = $this->repo->updateAmbulanceWithLinkage(
             (int) ($_POST['id'] ?? 0),
