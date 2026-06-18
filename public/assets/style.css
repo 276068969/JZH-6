@@ -2419,7 +2419,128 @@ select option.maintenance {
     color: var(--danger);
 }
 
+.vehicle-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.vehicle-filter-bar .filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 140px;
+}
+
+.vehicle-filter-bar .filter-item label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0;
+}
+
+.vehicle-filter-bar .filter-item label span {
+    margin: 0;
+}
+
+.vehicle-filter-bar .filter-item select,
+.vehicle-filter-bar .filter-item input {
+    min-height: 36px;
+    font-size: 13px;
+}
+
+.vehicle-filter-bar .filter-code {
+    flex: 1;
+    min-width: 180px;
+}
+
+.vehicle-filter-bar .filter-actions {
+    min-width: auto;
+}
+
+.vehicle-filter-bar .filter-actions .btn-reset {
+    min-height: 36px;
+    padding: 0 16px;
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    width: auto;
+}
+
+.vehicle-filter-bar .filter-actions .btn-reset:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.vehicle-filter-bar .filter-result-info {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.vehicle-filter-bar .filter-result-info #filter-result-count {
+    padding: 4px 12px;
+    background: #eff6ff;
+    color: #1e40af;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.empty-filter-result {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+}
+
+.empty-filter-result .empty-icon {
+    display: inline-block;
+    font-size: 36px;
+    margin-bottom: 10px;
+    opacity: 0.6;
+}
+
+.empty-filter-result p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.vehicle-table tr {
+    transition: opacity 0.15s ease;
+}
+
 @media (max-width: 880px) {
+    .vehicle-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vehicle-filter-bar .filter-item {
+        min-width: auto;
+    }
+
+    .vehicle-filter-bar .filter-code {
+        flex: none;
+    }
+
+    .vehicle-filter-bar .filter-result-info {
+        margin-left: 0;
+        justify-content: center;
+    }
+
     .info-grid {
         grid-template-columns: 1fr 1fr;
     }

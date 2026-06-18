@@ -153,12 +153,53 @@
 </section>
 
 <section class="grid two">
-    <div class="panel">
+    <?php
+        $hospitals = [];
+        foreach ($ambulances as $amb) {
+            if (!empty($amb['hospital']) && !in_array($amb['hospital'], $hospitals, true)) {
+                $hospitals[] = $amb['hospital'];
+            }
+        }
+        sort($hospitals);
+    ?>
+    <div class="panel" id="ambulance-list-panel">
         <div class="panel-head">
             <h2>车辆列表</h2>
             <span>状态 · 当前任务</span>
         </div>
-        <table>
+        <div class="vehicle-filter-bar">
+            <div class="filter-item">
+                <label>状态</label>
+                <select id="filter-status">
+                    <option value="">全部状态</option>
+                    <option value="standby">待命</option>
+                    <option value="dispatching">出车</option>
+                    <option value="on_scene">现场处置</option>
+                    <option value="transporting">转运中</option>
+                    <option value="maintenance">检修</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>医院</label>
+                <select id="filter-hospital">
+                    <option value="">全部医院</option>
+                    <?php foreach ($hospitals as $h): ?>
+                        <option value="<?= h($h) ?>"><?= h($h) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="filter-item filter-code">
+                <label>车辆编号</label>
+                <input type="text" id="filter-code" placeholder="输入编号，如 A-001">
+            </div>
+            <div class="filter-item filter-actions">
+                <button type="button" id="filter-reset" class="btn-reset">重置筛选</button>
+            </div>
+            <div class="filter-result-info">
+                <span id="filter-result-count">共 <?= count($ambulances) ?> 辆</span>
+            </div>
+        </div>
+        <table class="vehicle-table">
             <thead>
                 <tr>
                     <th>车辆</th>
@@ -168,9 +209,11 @@
                     <th>当前任务</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="ambulance-tbody">
             <?php foreach ($ambulances as $ambulance): ?>
-                <tr>
+                <tr data-status="<?= h($ambulance['status']) ?>"
+                    data-hospital="<?= h($ambulance['hospital']) ?>"
+                    data-code="<?= h($ambulance['code']) ?>">
                     <td><?= h($ambulance['code']) ?></td>
                     <td><?= h($ambulance['hospital']) ?></td>
                     <td><?= h($ambulance['location']) ?></td>
@@ -197,6 +240,10 @@
             <?php endforeach; ?>
             </tbody>
         </table>
+        <div id="empty-filter-result" class="empty-filter-result" style="display:none;">
+            <span class="empty-icon">🔍</span>
+            <p>没有匹配的车辆，请调整筛选条件</p>
+        </div>
     </div>
 
     <div class="panel">
@@ -643,6 +690,64 @@
     ambSelect.addEventListener('change', updateAmbulanceHint);
     ambStatus.addEventListener('change', updateAmbulanceHint);
     updateAmbulanceHint();
+
+    var filterStatus = document.getElementById('filter-status');
+    var filterHospital = document.getElementById('filter-hospital');
+    var filterCode = document.getElementById('filter-code');
+    var filterReset = document.getElementById('filter-reset');
+    var tbody = document.getElementById('ambulance-tbody');
+    var resultCount = document.getElementById('filter-result-count');
+    var emptyResult = document.getElementById('empty-filter-result');
+    var totalCount = tbody ? tbody.querySelectorAll('tr').length : 0;
+
+    function applyFilters() {
+        if (!tbody) return;
+        var rows = tbody.querySelectorAll('tr');
+        var statusVal = (filterStatus ? filterStatus.value : '').trim();
+        var hospitalVal = (filterHospital ? filterHospital.value : '').trim();
+        var codeVal = (filterCode ? filterCode.value : '').trim().toLowerCase();
+        var visible = 0;
+
+        rows.forEach(function(row) {
+            var matchStatus = !statusVal || row.getAttribute('data-status') === statusVal;
+            var matchHospital = !hospitalVal || row.getAttribute('data-hospital') === hospitalVal;
+            var matchCode = !codeVal || (row.getAttribute('data-code') || '').toLowerCase().indexOf(codeVal) !== -1;
+
+            if (matchStatus && matchHospital && matchCode) {
+                row.style.display = '';
+                visible++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (resultCount) {
+            resultCount.textContent = '显示 ' + visible + ' / 共 ' + totalCount + ' 辆';
+        }
+        if (emptyResult) {
+            emptyResult.style.display = visible === 0 ? '' : 'none';
+        }
+    }
+
+    function resetFilters() {
+        if (filterStatus) filterStatus.value = '';
+        if (filterHospital) filterHospital.value = '';
+        if (filterCode) filterCode.value = '';
+        applyFilters();
+    }
+
+    if (filterStatus) filterStatus.addEventListener('change', applyFilters);
+    if (filterHospital) filterHospital.addEventListener('change', applyFilters);
+    if (filterCode) {
+        var timer;
+        filterCode.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(applyFilters, 150);
+        });
+    }
+    if (filterReset) filterReset.addEventListener('click', resetFilters);
+
+    applyFilters();
 })();
 </script>
 <?php
