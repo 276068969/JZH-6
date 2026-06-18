@@ -36,6 +36,8 @@ try {
         $controller->updateAmbulance();
     } elseif ($path === '/admin/alerts/handle' && $method === 'POST') {
         $controller->handleAlert();
+    } elseif (preg_match('#^/admin/cases/([^/]+)$#', $path, $matches) && $method === 'GET') {
+        $controller->caseDetail(urldecode($matches[1]));
     } elseif ($path === '/api/overview' && $method === 'GET') {
         $controller->overviewApi();
     } elseif ($path === '/api/dispatch-check' && $method === 'GET') {

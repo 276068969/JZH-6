@@ -245,6 +245,24 @@ final class DashboardRepository
         return $this->db->query($sql)->fetchAll();
     }
 
+    public function findCaseByCaseNo(string $caseNo): ?array
+    {
+        $sql = 'SELECT ec.*, 
+                       a.hospital as ambulance_hospital, 
+                       a.status as ambulance_status,
+                       a.plate_no as ambulance_plate_no,
+                       a.driver_name as ambulance_driver_name,
+                       a.location as ambulance_location
+                FROM emergency_cases ec 
+                LEFT JOIN ambulances a ON ec.assigned_ambulance = a.code
+                WHERE ec.case_no = :case_no 
+                LIMIT 1';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute(['case_no' => $caseNo]);
+        $case = $stmt->fetch();
+        return $case ?: null;
+    }
+
     public function isAmbulanceAvailable(string $code): array
     {
         $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
@@ -371,6 +389,28 @@ final class DashboardRepository
             return $stmt->fetchAll();
         } catch (\Throwable $e) {
             error_log('查询审计日志失败: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    public function recentStatusAuditLogsForCase(string $caseNo, int $limit = 10): array
+    {
+        try {
+            if (!$this->isAuditTableExists()) {
+                return [];
+            }
+
+            $sql = 'SELECT * FROM ambulance_status_audit 
+                     WHERE related_case_no = :case_no 
+                     ORDER BY created_at DESC 
+                     LIMIT :limit';
+            $stmt = $this->db->prepare($sql);
+            $stmt->bindValue('case_no', $caseNo);
+            $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            error_log('查询事件审计日志失败: ' . $e->getMessage());
             return [];
         }
     }

@@ -188,6 +188,47 @@ final class AppController
         );
     }
 
+    public function caseDetail(string $caseNo): void
+    {
+        Auth::requireAdmin();
+
+        $case = $this->repo->findCaseByCaseNo($caseNo);
+
+        if (!$case) {
+            http_response_code(404);
+            echo '事件不存在';
+            return;
+        }
+
+        $hasAmbulance = !empty($case['assigned_ambulance']);
+        $match = checkCaseVehicleStatusMatch(
+            $case['status'],
+            $case['ambulance_status'] ?? null,
+            $hasAmbulance
+        );
+
+        $statusAuditLogs = [];
+        $auditTableAvailable = false;
+        try {
+            $auditTableAvailable = $this->repo->isAuditTableAvailable();
+            if ($auditTableAvailable && $hasAmbulance) {
+                $statusAuditLogs = $this->repo->recentStatusAuditLogsForCase($caseNo, 10);
+            }
+        } catch (\Throwable $e) {
+            error_log('加载审计日志失败: ' . $e->getMessage());
+        }
+
+        View::render('case_detail', [
+            'case' => $case,
+            'match' => $match,
+            'has_ambulance' => $hasAmbulance,
+            'status_audit_logs' => $statusAuditLogs,
+            'audit_table_available' => $auditTableAvailable,
+            'user' => Auth::user(),
+            'flash' => $this->getFlash(),
+        ]);
+    }
+
     private function setFlash(string $type, array $messages): void
     {
         $_SESSION['_flash'][$type] = $messages;

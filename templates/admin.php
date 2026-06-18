@@ -227,7 +227,7 @@
                     );
                 ?>
                 <tr class="case-row-<?= $match['level'] ?>">
-                    <td class="case-link"><?= h($case['case_no']) ?></td>
+                    <td class="case-link"><a href="/admin/cases/<?= urlencode($case['case_no']) ?>"><?= h($case['case_no']) ?></a></td>
                     <td><?= h($case['patient_name']) ?></td>
                     <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
                     <td>
@@ -460,7 +460,7 @@
                             </td>
                             <td class="audit-case">
                                 <?php if (!empty($log['related_case_no'])): ?>
-                                    <span class="case-link"><?= h($log['related_case_no']) ?></span>
+                                    <span class="case-link"><a href="/admin/cases/<?= urlencode($log['related_case_no']) ?>"><?= h($log['related_case_no']) ?></a></span>
                                 <?php else: ?>
                                     <span class="muted">—</span>
                                 <?php endif; ?>
