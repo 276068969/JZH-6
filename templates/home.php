@@ -100,7 +100,13 @@
 <section class="panel">
     <div class="panel-head">
         <h2>急救事件</h2>
-        <span>最近 12 条</span>
+        <div class="alerts-refresh-info">
+            <span>最近 12 条</span>
+            <span class="refresh-indicator" id="cases-refresh-indicator" title="每 30 秒自动刷新">
+                <span class="refresh-dot"></span>
+                <span id="cases-refresh-time">实时同步中</span>
+            </span>
+        </div>
     </div>
     <table class="case-table-front">
         <thead>
@@ -112,7 +118,7 @@
                 <th class="col-ambulance">车辆</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="cases-tbody">
         <?php foreach ($cases as $case): ?>
             <?php
                 $isClosed = $case['status'] === 'closed';
@@ -199,6 +205,9 @@
     var alertsContainer = document.getElementById('front-alerts');
     var refreshIndicator = document.getElementById('refresh-indicator');
     var refreshTime = document.getElementById('refresh-time');
+    var casesTbody = document.getElementById('cases-tbody');
+    var casesRefreshIndicator = document.getElementById('cases-refresh-indicator');
+    var casesRefreshTime = document.getElementById('cases-refresh-time');
     var statusTextMap = {
         'standby': '待命',
         'dispatching': '出车',
@@ -215,23 +224,45 @@
         'open': 'status-open',
         'resolved': 'status-resolved'
     };
+    var caseStatusClassMap = {
+        'reported': 'status-reported',
+        'accepted': 'status-accepted',
+        'closed': 'status-closed'
+    };
+    var priorityTextMap = {
+        'high': '高',
+        'medium': '中',
+        'low': '低'
+    };
 
-    function updateAlertsCount(count) {
+    var knownCaseNos = {};
+    (function initKnownCases() {
+        if (!casesTbody) return;
+        var rows = casesTbody.querySelectorAll('tr');
+        rows.forEach(function(row) {
+            var noEl = row.querySelector('.col-case-no .case-no-text');
+            if (noEl) {
+                knownCaseNos[noEl.textContent.trim()] = true;
+            }
+        });
+    })();
+
+    function updateMetric(index, count, highlightColor) {
         if (!metricsSection) return;
         var metricsDivs = metricsSection.querySelectorAll('div');
-        if (metricsDivs.length >= 4) {
-            var alertMetric = metricsDivs[3];
-            var strongEl = alertMetric.querySelector('strong');
-            if (strongEl) {
-                var oldCount = parseInt(strongEl.textContent, 10);
-                if (oldCount !== count) {
-                    strongEl.textContent = count;
-                    alertMetric.style.transition = 'background-color 0.3s';
-                    alertMetric.style.backgroundColor = '#fef3c7';
-                    setTimeout(function() {
-                        alertMetric.style.backgroundColor = '';
-                    }, 1500);
-                }
+        var div = metricsDivs[index];
+        if (!div) return;
+        var strongEl = div.querySelector('strong');
+        if (!strongEl) return;
+        var oldCount = parseInt(strongEl.textContent, 10);
+        if (oldCount !== count) {
+            strongEl.textContent = count;
+            if (highlightColor) {
+                div.style.transition = 'background-color 0.3s';
+                div.style.backgroundColor = highlightColor;
+                setTimeout(function() {
+                    div.style.backgroundColor = '';
+                }, 1500);
             }
         }
     }
@@ -285,25 +316,141 @@
         });
     }
 
+    function renderCases(cases) {
+        if (!casesTbody) return;
+        casesTbody.innerHTML = '';
+        cases.forEach(function(c) {
+            var isClosed = c.status === 'closed';
+            var hasAmbulance = !!c.assigned_ambulance;
+            var isNew = !knownCaseNos[c.case_no];
+            knownCaseNos[c.case_no] = true;
+
+            var tr = document.createElement('tr');
+            tr.className = 'case-row case-status-' + c.status +
+                (isClosed ? ' case-row-closed' : '') +
+                (isNew ? ' case-row-fresh' : '');
+
+            var tdNo = document.createElement('td');
+            tdNo.className = 'col-case-no';
+            var noSpan = document.createElement('span');
+            noSpan.className = 'case-no-text';
+            noSpan.textContent = c.case_no;
+            tdNo.appendChild(noSpan);
+
+            var tdPri = document.createElement('td');
+            tdPri.className = 'col-priority';
+            var priSpan = document.createElement('span');
+            priSpan.className = 'priority-badge priority-' + c.priority;
+            var priDot = document.createElement('span');
+            priDot.className = 'priority-dot';
+            priSpan.appendChild(priDot);
+            priSpan.appendChild(document.createTextNode((priorityTextMap[c.priority] || c.priority) + '级'));
+            tdPri.appendChild(priSpan);
+
+            var tdAddr = document.createElement('td');
+            tdAddr.className = 'col-address';
+            var addrSpan = document.createElement('span');
+            addrSpan.className = 'address-text';
+            var addr = c.address || '—';
+            addrSpan.textContent = addr;
+            addrSpan.setAttribute('title', addr);
+            tdAddr.appendChild(addrSpan);
+
+            var tdStatus = document.createElement('td');
+            tdStatus.className = 'col-status';
+            var stSpan = document.createElement('span');
+            stSpan.className = 'status-tag ' + (caseStatusClassMap[c.status] || '');
+            stSpan.textContent = statusTextMap[c.status] || c.status;
+            tdStatus.appendChild(stSpan);
+
+            var tdAmb = document.createElement('td');
+            tdAmb.className = 'col-ambulance';
+            var ambInfo = document.createElement('span');
+            if (isClosed) {
+                ambInfo.className = 'ambulance-info ambulance-closed';
+                var i1 = document.createElement('span');
+                i1.className = 'ambulance-icon';
+                i1.textContent = '✓';
+                var t1 = document.createElement('span');
+                t1.className = 'ambulance-text';
+                t1.textContent = '已结案';
+                ambInfo.appendChild(i1);
+                ambInfo.appendChild(t1);
+            } else if (hasAmbulance) {
+                ambInfo.className = 'ambulance-info ambulance-assigned';
+                var i2 = document.createElement('span');
+                i2.className = 'ambulance-icon';
+                i2.textContent = '🚑';
+                var code = document.createElement('span');
+                code.className = 'ambulance-code';
+                code.textContent = c.assigned_ambulance;
+                ambInfo.appendChild(i2);
+                ambInfo.appendChild(code);
+            } else {
+                ambInfo.className = 'ambulance-info ambulance-pending';
+                var i3 = document.createElement('span');
+                i3.className = 'ambulance-icon';
+                i3.textContent = '⏳';
+                var t3 = document.createElement('span');
+                t3.className = 'ambulance-text';
+                t3.textContent = '待派车';
+                ambInfo.appendChild(i3);
+                ambInfo.appendChild(t3);
+            }
+            tdAmb.appendChild(ambInfo);
+
+            tr.appendChild(tdNo);
+            tr.appendChild(tdPri);
+            tr.appendChild(tdAddr);
+            tr.appendChild(tdStatus);
+            tr.appendChild(tdAmb);
+            casesTbody.appendChild(tr);
+        });
+    }
+
+    function formatNow() {
+        var now = new Date();
+        return now.getHours().toString().padStart(2, '0') + ':' +
+               now.getMinutes().toString().padStart(2, '0') + ':' +
+               now.getSeconds().toString().padStart(2, '0');
+    }
+
     function refreshData() {
         if (refreshIndicator) {
             refreshIndicator.classList.add('refreshing');
         }
+        if (casesRefreshIndicator) {
+            casesRefreshIndicator.classList.add('refreshing');
+        }
         fetch('/api/overview', { cache: 'no-store' })
             .then(function(res) { return res.json(); })
             .then(function(data) {
-                if (data.overview && typeof data.overview.alerts !== 'undefined') {
-                    updateAlertsCount(parseInt(data.overview.alerts, 10));
+                if (data.overview) {
+                    if (typeof data.overview.ambulances_total !== 'undefined') {
+                        updateMetric(0, parseInt(data.overview.ambulances_total, 10), '');
+                    }
+                    if (typeof data.overview.ambulances_online !== 'undefined') {
+                        updateMetric(1, parseInt(data.overview.ambulances_online, 10), '');
+                    }
+                    if (typeof data.overview.active_cases !== 'undefined') {
+                        updateMetric(2, parseInt(data.overview.active_cases, 10), '#dbeafe');
+                    }
+                    if (typeof data.overview.alerts !== 'undefined') {
+                        updateMetric(3, parseInt(data.overview.alerts, 10), '#fef3c7');
+                    }
                 }
                 if (data.alerts) {
                     renderAlerts(data.alerts);
                 }
-                var now = new Date();
-                var timeStr = now.getHours().toString().padStart(2, '0') + ':' +
-                              now.getMinutes().toString().padStart(2, '0') + ':' +
-                              now.getSeconds().toString().padStart(2, '0');
+                if (data.cases) {
+                    renderCases(data.cases);
+                }
+                var timeStr = '更新于 ' + formatNow();
                 if (refreshTime) {
-                    refreshTime.textContent = '更新于 ' + timeStr;
+                    refreshTime.textContent = timeStr;
+                }
+                if (casesRefreshTime) {
+                    casesRefreshTime.textContent = timeStr;
                 }
             })
             .catch(function(err) {
@@ -311,11 +458,19 @@
                 if (refreshTime) {
                     refreshTime.textContent = '刷新失败';
                 }
+                if (casesRefreshTime) {
+                    casesRefreshTime.textContent = '刷新失败';
+                }
             })
             .finally(function() {
                 if (refreshIndicator) {
                     setTimeout(function() {
                         refreshIndicator.classList.remove('refreshing');
+                    }, 500);
+                }
+                if (casesRefreshIndicator) {
+                    setTimeout(function() {
+                        casesRefreshIndicator.classList.remove('refreshing');
                     }, 500);
                 }
             });

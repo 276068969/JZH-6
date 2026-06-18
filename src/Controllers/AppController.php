@@ -69,6 +69,9 @@ final class AppController
             error_log('加载审计日志失败: ' . $e->getMessage());
         }
         
+        $lastCreatedCase = $_SESSION['_last_created_case'] ?? null;
+        unset($_SESSION['_last_created_case']);
+
         View::render('admin', [
             'overview' => $this->repo->overview(),
             'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
@@ -80,6 +83,7 @@ final class AppController
             'audit_table_available' => $auditTableAvailable,
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
+            'last_created_case' => $lastCreatedCase,
         ]);
     }
 
@@ -122,11 +126,16 @@ final class AppController
         if (!$result['success']) {
             $this->setFlash('errors', $result['errors']);
         } else {
-            $messages = ['事件 ' . $result['case_no'] . ' 创建成功'];
+            $dispatchInfo = $result['dispatch_info'] ?? [];
+            $message = '事件 ' . $result['case_no'] . ' 创建成功';
+            if (!empty($dispatchInfo['vehicle_code'])) {
+                $message .= '，已派车 ' . $dispatchInfo['vehicle_code'];
+            }
             if (!empty($result['warnings'])) {
                 $this->setFlash('warnings', $result['warnings']);
             }
-            $this->setFlash('success', $messages);
+            $this->setFlash('success', [$message]);
+            $_SESSION['_last_created_case'] = $result['case_no'];
         }
 
         header('Location: /admin');

@@ -2571,3 +2571,43 @@ select option.maintenance {
         justify-content: center;
     }
 }
+
+.metric-flash {
+    animation: metric-flash 1.8s ease-out 1;
+}
+
+@keyframes metric-flash {
+    0%, 25% { background-color: #dbeafe; }
+    100% { background-color: var(--panel); }
+}
+
+.new-case-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: #16a34a;
+    color: #fff;
+    vertical-align: middle;
+}
+
+.case-table .case-row-new {
+    animation: case-row-new 2.6s ease-out 1;
+}
+
+@keyframes case-row-new {
+    0%, 30% { background-color: #bbf7d0; }
+    100% { background-color: transparent; }
+}
+
+.case-table-front .case-row-fresh {
+    animation: case-row-fresh 2.6s ease-out 1;
+}
+
+@keyframes case-row-fresh {
+    0%, 30% { background-color: #dbeafe; }
+    100% { background-color: transparent; }
+}

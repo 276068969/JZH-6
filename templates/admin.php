@@ -26,7 +26,7 @@
 <section class="metrics compact">
     <div><span>接入车辆</span><strong><?= (int) $overview['ambulances_total'] ?></strong></div>
     <div><span>在线车辆</span><strong><?= (int) $overview['ambulances_online'] ?></strong></div>
-    <div><span>事件处理中</span><strong><?= (int) $overview['active_cases'] ?></strong></div>
+    <div id="metric-active-cases"<?= !empty($last_created_case) ? ' class="metric-flash"' : '' ?>><span>事件处理中</span><strong><?= (int) $overview['active_cases'] ?></strong></div>
     <div><span>告警待处置</span><strong><?= (int) $overview['alerts'] ?></strong></div>
 </section>
 
@@ -272,9 +272,15 @@
                         $case['ambulance_status'] ?? null,
                         $hasAmbulance
                     );
+                    $isNewCase = !empty($last_created_case) && $last_created_case === $case['case_no'];
                 ?>
-                <tr class="case-row-<?= $match['level'] ?>">
-                    <td class="case-link"><a href="/admin/cases/<?= urlencode($case['case_no']) ?>"><?= h($case['case_no']) ?></a></td>
+                <tr class="case-row-<?= $match['level'] ?><?= $isNewCase ? ' case-row-new' : '' ?>" data-case-no="<?= h($case['case_no']) ?>">
+                    <td class="case-link">
+                        <a href="/admin/cases/<?= urlencode($case['case_no']) ?>"><?= h($case['case_no']) ?></a>
+                        <?php if ($isNewCase): ?>
+                            <span class="new-case-badge">新增</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($case['patient_name']) ?></td>
                     <td><span class="badge priority-<?= h($case['priority']) ?>"><?= priorityText($case['priority']) ?></span></td>
                     <td>
@@ -748,6 +754,20 @@
     if (filterReset) filterReset.addEventListener('click', resetFilters);
 
     applyFilters();
+})();
+</script>
+<script>
+(function() {
+    var newRow = document.querySelector('.case-row-new');
+    if (newRow) {
+        var metric = document.getElementById('metric-active-cases');
+        setTimeout(function() {
+            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 250);
+        if (metric) {
+            metric.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
 })();
 </script>
 <?php
