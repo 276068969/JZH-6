@@ -42,6 +42,8 @@ try {
         $controller->overviewApi();
     } elseif ($path === '/api/dispatch-check' && $method === 'GET') {
         $controller->dispatchCheckApi();
+    } elseif ($path === '/api/ambulances' && $method === 'POST') {
+        $controller->updateAmbulanceApi();
     } else {
         http_response_code(404);
         echo '页面不存在';

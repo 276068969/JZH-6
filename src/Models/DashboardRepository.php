@@ -415,6 +415,26 @@ final class DashboardRepository
         }
     }
 
+    public function validateAmbulanceStatusChange(string $oldStatus, string $newStatus, string $location): array
+    {
+        $errors = [];
+        $validStatuses = ['standby', 'dispatching', 'on_scene', 'transporting', 'maintenance'];
+
+        if (!in_array($newStatus, $validStatuses, true)) {
+            $errors[] = '无效的车辆状态：' . $newStatus;
+        }
+
+        if ($oldStatus === 'maintenance' && in_array($newStatus, ['dispatching', 'on_scene', 'transporting'], true)) {
+            $errors[] = '检修车辆不能直接更新为「' . statusText($newStatus) . '」状态，请先设为待命';
+        }
+
+        if ($newStatus === 'standby' && trim($location) === '') {
+            $errors[] = '待命车辆必须填写当前位置';
+        }
+
+        return $errors;
+    }
+
     public function updateAmbulanceWithLinkage(
         int $id,
         string $status,
@@ -434,6 +454,11 @@ final class DashboardRepository
 
         $oldStatus = $ambulance['status'];
         $oldLocation = $ambulance['location'];
+
+        $validationErrors = $this->validateAmbulanceStatusChange($oldStatus, $status, $location);
+        if (!empty($validationErrors)) {
+            return ['success' => false, 'errors' => $validationErrors];
+        }
 
         $this->db->beginTransaction();
         try {

@@ -188,6 +188,80 @@ final class AppController
         );
     }
 
+    public function updateAmbulanceApi(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($input)) {
+            $input = $_POST;
+        }
+
+        $id = (int) ($input['id'] ?? 0);
+        $status = $input['status'] ?? 'standby';
+        $location = trim($input['location'] ?? '');
+
+        if ($id <= 0) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'error_code' => 'INVALID_ID',
+                'message' => '无效的车辆ID',
+                'errors' => ['无效的车辆ID'],
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $user = Auth::user();
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode([
+                'success' => false,
+                'error_code' => 'UNAUTHORIZED',
+                'message' => '请先登录',
+                'errors' => ['请先登录'],
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if ($user['role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'error_code' => 'FORBIDDEN',
+                'message' => '无权限执行此操作',
+                'errors' => ['无权限执行此操作'],
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $result = $this->repo->updateAmbulanceWithLinkage(
+            $id,
+            $status,
+            $location,
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
+        );
+
+        if (!$result['success']) {
+            http_response_code(422);
+            echo json_encode([
+                'success' => false,
+                'error_code' => 'VALIDATION_ERROR',
+                'message' => '数据校验失败',
+                'errors' => $result['errors'],
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => '车辆状态更新成功',
+            'warnings' => $result['warnings'] ?? [],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
     public function caseDetail(string $caseNo): void
     {
         Auth::requireAdmin();
