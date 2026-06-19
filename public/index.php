@@ -49,6 +49,8 @@ try {
         $controller->caseDetail(urldecode($matches[1]));
     } elseif ($path === '/api/overview' && $method === 'GET') {
         $controller->overviewApi();
+    } elseif ($path === '/api/cases/priority-stats' && $method === 'GET') {
+        $controller->casePriorityStatsApi();
     } elseif ($path === '/api/dispatch-check' && $method === 'GET') {
         $controller->dispatchCheckApi();
     } elseif ($path === '/api/ambulances' && $method === 'POST') {

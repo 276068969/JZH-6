@@ -879,4 +879,65 @@ final class DashboardRepository
     {
         return $this->db()->query('SELECT * FROM ambulances ORDER BY code')->fetchAll();
     }
+
+    public function casePriorityStatistics(): array
+    {
+        $total = (int) $this->db()->query('SELECT COUNT(*) FROM emergency_cases')->fetchColumn();
+        $openTotal = (int) $this->db()->query('SELECT COUNT(*) FROM emergency_cases WHERE status != "closed"')->fetchColumn();
+
+        $sql = 'SELECT priority, COUNT(*) as count FROM emergency_cases GROUP BY priority';
+        $rows = $this->db()->query($sql)->fetchAll();
+        $byPriority = [];
+        foreach ($rows as $row) {
+            $byPriority[$row['priority']] = (int) $row['count'];
+        }
+
+        $sqlOpen = 'SELECT priority, COUNT(*) as count FROM emergency_cases WHERE status != "closed" GROUP BY priority';
+        $rowsOpen = $this->db()->query($sqlOpen)->fetchAll();
+        $openByPriority = [];
+        foreach ($rowsOpen as $row) {
+            $openByPriority[$row['priority']] = (int) $row['count'];
+        }
+
+        $allPriorities = ['high', 'medium', 'low'];
+        foreach ($allPriorities as $priority) {
+            if (!isset($byPriority[$priority])) {
+                $byPriority[$priority] = 0;
+            }
+            if (!isset($openByPriority[$priority])) {
+                $openByPriority[$priority] = 0;
+            }
+        }
+
+        $openRatio = $total > 0 ? round(($openTotal / $total) * 100, 2) : 0.0;
+
+        $openRatioByPriority = [];
+        foreach ($allPriorities as $priority) {
+            $openRatioByPriority[$priority] = $byPriority[$priority] > 0
+                ? round(($openByPriority[$priority] / $byPriority[$priority]) * 100, 2)
+                : 0.0;
+        }
+
+        return [
+            'total' => $total,
+            'open_total' => $openTotal,
+            'closed_total' => $total - $openTotal,
+            'open_ratio' => $openRatio,
+            'by_priority' => [
+                'high' => $byPriority['high'],
+                'medium' => $byPriority['medium'],
+                'low' => $byPriority['low'],
+            ],
+            'open_by_priority' => [
+                'high' => $openByPriority['high'],
+                'medium' => $openByPriority['medium'],
+                'low' => $openByPriority['low'],
+            ],
+            'open_ratio_by_priority' => [
+                'high' => $openRatioByPriority['high'],
+                'medium' => $openRatioByPriority['medium'],
+                'low' => $openRatioByPriority['low'],
+            ],
+        ];
+    }
 }

@@ -245,6 +245,7 @@ final class AppController
             $ambulances = $this->repo->ambulances();
             $cases = $this->repo->cases();
             $alerts = $this->repo->alerts();
+            $priorityStats = $this->repo->casePriorityStatistics();
 
             echo json_encode([
                 'success' => true,
@@ -256,11 +257,29 @@ final class AppController
                     'ambulance_by_status' => $overview['ambulance_status_breakdown'],
                     'case_by_priority' => $overview['case_priority_breakdown'],
                     'alert_by_status' => $overview['alert_status_breakdown'],
+                    'case_priority_statistics' => $priorityStats,
                 ],
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             error_log('api/overview 异常: ' . $e->getMessage());
             ErrorResponse::databaseError('获取概览数据失败，请稍后重试');
+        }
+    }
+
+    public function casePriorityStatsApi(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $stats = $this->repo->casePriorityStatistics();
+
+            echo json_encode([
+                'success' => true,
+                'data' => $stats,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('api/cases/priority-stats 异常: ' . $e->getMessage());
+            ErrorResponse::databaseError('获取事件优先级统计失败，请稍后重试');
         }
     }
 
