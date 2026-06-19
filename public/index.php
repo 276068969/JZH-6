@@ -45,8 +45,12 @@ try {
         $controller->deleteAmbulance();
     } elseif ($path === '/admin/alerts/handle' && $method === 'POST') {
         $controller->handleAlert();
+    } elseif ($path === '/admin/cases/transition' && $method === 'POST') {
+        $controller->transitionCaseStatus();
     } elseif (preg_match('#^/admin/cases/([^/]+)$#', $path, $matches) && $method === 'GET') {
         $controller->caseDetail(urldecode($matches[1]));
+    } elseif ($path === '/api/cases/status-transitions' && $method === 'GET') {
+        $controller->caseStatusTransitionsApi();
     } elseif ($path === '/api/overview' && $method === 'GET') {
         $controller->overviewApi();
     } elseif ($path === '/api/cases/priority-stats' && $method === 'GET') {

@@ -37,7 +37,7 @@ ob_start();
 <section class="metrics compact">
     <div><span>接入车辆</span><strong><?= (int) $overview['ambulances_total'] ?></strong></div>
     <div><span>在线车辆</span><strong><?= (int) $overview['ambulances_online'] ?></strong></div>
-    <div id="metric-active-cases"<?= !empty($last_created_case) ? ' class="metric-flash"' : '' ?>><span>事件处理中</span><strong><?= (int) $overview['active_cases'] ?></strong></div>
+    <div id="metric-active-cases"<?= (!empty($last_created_case) || !empty($last_status_changed_case)) ? ' class="metric-flash"' : '' ?>><span>事件处理中</span><strong><?= (int) $overview['active_cases'] ?></strong></div>
     <div><span>告警待处置</span><strong><?= (int) $overview['alerts'] ?></strong></div>
 </section>
 
@@ -260,7 +260,7 @@ ob_start();
     <div class="panel">
         <div class="panel-head">
             <h2>事件列表</h2>
-            <span>派车 · 状态联动 · 快照校验</span>
+            <span>派车 · 状态流转 · 快照校验</span>
         </div>
         <table class="case-table">
             <thead>
@@ -272,6 +272,7 @@ ob_start();
                     <th>事件状态</th>
                     <th>车辆状态</th>
                     <th>匹配状态</th>
+                    <th>操作</th>
                 </tr>
             </thead>
             <tbody>
@@ -284,12 +285,17 @@ ob_start();
                         $hasAmbulance
                     );
                     $isNewCase = !empty($last_created_case) && $last_created_case === $case['case_no'];
+                    $isStatusChanged = !empty($last_status_changed_case) && $last_status_changed_case === $case['case_no'];
+                    $actions = $case_status_actions[$case['case_no']] ?? [];
                 ?>
-                <tr class="case-row-<?= $match['level'] ?><?= $isNewCase ? ' case-row-new' : '' ?>" data-case-no="<?= h($case['case_no']) ?>">
+                <tr class="case-row-<?= $match['level'] ?><?= $isNewCase ? ' case-row-new' : '' ?><?= $isStatusChanged ? ' case-row-changed' : '' ?>" data-case-no="<?= h($case['case_no']) ?>">
                     <td class="case-link">
                         <a href="/admin/cases/<?= urlencode($case['case_no']) ?>"><?= h($case['case_no']) ?></a>
                         <?php if ($isNewCase): ?>
                             <span class="new-case-badge">新增</span>
+                        <?php endif; ?>
+                        <?php if ($isStatusChanged): ?>
+                            <span class="changed-case-badge">状态已变更</span>
                         <?php endif; ?>
                     </td>
                     <td><?= h($case['patient_name']) ?></td>
@@ -347,10 +353,43 @@ ob_start();
                             <div class="match-reason muted"><?= h($match['expected']) ?></div>
                         <?php endif; ?>
                     </td>
+                    <td>
+                        <div class="case-status-actions">
+                            <?php if (empty($actions)): ?>
+                                <span class="muted no-actions" style="font-size:12px">已结案</span>
+                            <?php else: ?>
+                                <?php foreach ($actions as $targetStatus => $action): ?>
+                                    <form method="post" action="/admin/cases/transition" 
+                                          class="inline-form case-action-form"
+                                          onsubmit="return confirm('<?= h($action['confirm']) ?>');">
+                                        <input type="hidden" name="case_no" value="<?= h($case['case_no']) ?>">
+                                        <input type="hidden" name="new_status" value="<?= h($targetStatus) ?>">
+                                        <input type="hidden" name="redirect_to" value="/admin">
+                                        <button type="submit" 
+                                                class="btn-case-action <?= h($action['button_class']) ?>"
+                                                title="<?= h($action['description']) ?>">
+                                            <?= h($action['label']) ?>
+                                        </button>
+                                    </form>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            <a href="/admin/cases/<?= urlencode($case['case_no']) ?>" 
+                               class="btn-case-detail" title="查看详情">
+                                详情
+                            </a>
+                        </div>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
+        <div class="case-flow-legend muted" style="margin-top:12px;padding:10px 14px;background:var(--bg-soft);border-radius:6px;font-size:12px;">
+            <strong>状态流转说明：</strong>
+            <span class="status-tag-small status-reported">已上报</span> → 
+            <span class="status-tag-small status-accepted">已受理</span>（调度员确认受理，进入处置流程）→ 
+            <span class="status-tag-small status-closed">已关闭</span>（患者送达或处置完成，结案后前台「进行中事件」自动减少）
+            <span style="margin-left:16px;">※ 也支持 <span class="status-tag-small status-reported">已上报</span> 直接 <span class="status-tag-small status-closed">关闭</span>（如误报、取消呼叫）</span>
+        </div>
     </div>
 </section>
 
@@ -778,11 +817,11 @@ ob_start();
 </script>
 <script>
 (function() {
-    var newRow = document.querySelector('.case-row-new');
-    if (newRow) {
+    var highlightRow = document.querySelector('.case-row-new, .case-row-changed');
+    if (highlightRow) {
         var metric = document.getElementById('metric-active-cases');
         setTimeout(function() {
-            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            highlightRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 250);
         if (metric) {
             metric.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

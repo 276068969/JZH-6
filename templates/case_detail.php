@@ -79,6 +79,18 @@
                 <span class="meta-value"><?= h($case['dispatched_at']) ?></span>
             </div>
             <?php endif; ?>
+            <?php if (!empty($case['accepted_at'])): ?>
+            <div class="meta-item">
+                <span class="meta-label">受理时间</span>
+                <span class="meta-value"><?= h($case['accepted_at']) ?></span>
+            </div>
+            <?php endif; ?>
+            <?php if (!empty($case['closed_at'])): ?>
+            <div class="meta-item">
+                <span class="meta-label">结案时间</span>
+                <span class="meta-value"><?= h($case['closed_at']) ?></span>
+            </div>
+            <?php endif; ?>
             <?php if ($has_ambulance && !empty($case['dispatch_vehicle_status'])): ?>
             <div class="meta-item">
                 <span class="meta-label">派车时车辆状态</span>
@@ -89,6 +101,101 @@
             <?php endif; ?>
         </div>
     </div>
+</section>
+
+<section class="panel case-status-transition-panel">
+    <div class="case-status-transition-head">
+        <h3>事件状态流转</h3>
+        <span>调度操作 · 状态推进 · 前台同步</span>
+    </div>
+
+    <div class="case-status-flow">
+        <?php
+            $flowSteps = [
+                'reported' => ['label' => '已上报', 'desc' => '事件录入'],
+                'accepted' => ['label' => '已受理', 'desc' => '调度处置'],
+                'closed'   => ['label' => '已关闭', 'desc' => '事件结案'],
+            ];
+            $stepKeys = array_keys($flowSteps);
+            $currentStatus = $case['status'];
+            $currentIndex = array_search($currentStatus, $stepKeys, true);
+            if ($currentIndex === false) { $currentIndex = -1; }
+        ?>
+        <?php foreach ($stepKeys as $i => $statusKey): ?>
+            <?php
+                $step = $flowSteps[$statusKey];
+                $isDone = $i < $currentIndex || ($currentStatus === 'closed');
+                $isActive = $statusKey === $currentStatus && $currentStatus !== 'closed';
+            ?>
+            <div class="flow-node <?= $isActive ? 'is-active' : ($isDone ? 'is-done' : '') ?>">
+                <span class="status-tag <?= statusClass($statusKey) ?>"><?= h($step['label']) ?></span>
+                <span class="flow-step-label"><?= h($step['desc']) ?></span>
+            </div>
+            <?php if ($i < count($stepKeys) - 1): ?>
+                <?php $arrowActive = $statusKey === $currentStatus && $currentStatus !== 'closed'; ?>
+                <span class="flow-arrow <?= $arrowActive ? 'is-active' : '' ?>">→</span>
+            <?php endif; ?>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="case-status-timestamps">
+        <div class="ts-item">
+            <span class="ts-label">创建时间</span>
+            <span class="ts-value"><?= !empty($case['created_at']) ? h($case['created_at']) : '—' ?></span>
+        </div>
+        <div class="ts-item">
+            <span class="ts-label">派车时间</span>
+            <span class="ts-value <?= empty($case['dispatched_at']) ? 'empty' : '' ?>"><?= !empty($case['dispatched_at']) ? h($case['dispatched_at']) : '未派车' ?></span>
+        </div>
+        <div class="ts-item">
+            <span class="ts-label">受理时间</span>
+            <span class="ts-value <?= empty($case['accepted_at']) ? 'empty' : '' ?>"><?= !empty($case['accepted_at']) ? h($case['accepted_at']) : '待受理' ?></span>
+        </div>
+        <div class="ts-item">
+            <span class="ts-label">结案时间</span>
+            <span class="ts-value <?= empty($case['closed_at']) ? 'empty' : '' ?>"><?= !empty($case['closed_at']) ? h($case['closed_at']) : '处理中' ?></span>
+        </div>
+    </div>
+
+    <?php if (!empty($next_status_actions)): ?>
+    <div class="transition-actions" style="margin-top:20px;">
+        <?php foreach ($next_status_actions as $targetStatus => $action): ?>
+            <?php $cardType = ($targetStatus === 'accepted') ? 'accept' : 'close'; ?>
+            <?php $iconType = ($targetStatus === 'accepted') ? '✓' : '■'; ?>
+            <div class="transition-action-card type-<?= $cardType ?>">
+                <div class="transition-action-title">
+                    <span class="icon"><?= $iconType ?></span>
+                    <span><?= h($action['label']) ?></span>
+                    <span style="margin-left:auto;">
+                        <span class="status-tag-small status-<?= h($case['status']) ?>"><?= statusText($case['status']) ?></span>
+                        <span style="color:#94a3b8;margin:0 6px;">→</span>
+                        <span class="status-tag-small status-<?= statusClass($targetStatus) ?>"><?= statusText($targetStatus) ?></span>
+                    </span>
+                </div>
+                <p class="transition-action-desc"><?= h($action['description']) ?></p>
+                <form method="post" action="/admin/cases/transition" class="transition-form"
+                      onsubmit="return confirm('<?= h($action['confirm']) ?>');">
+                    <input type="hidden" name="case_no" value="<?= h($case['case_no']) ?>">
+                    <input type="hidden" name="new_status" value="<?= h($targetStatus) ?>">
+                    <input type="hidden" name="redirect_to" value="/admin/cases/<?= urlencode($case['case_no']) ?>">
+                    <textarea name="transition_notes" 
+                              placeholder="流转备注（可选）：如患者送达医院、家属取消呼叫、现场处置完成等情况说明..."></textarea>
+                    <button type="submit" class="btn-submit-<?= $cardType ?>">
+                        确认「<?= h($action['label']) ?>」
+                    </button>
+                </form>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php else: ?>
+    <div style="margin-top:20px;padding:16px;background:#fff;border:1px solid var(--line);border-radius:8px;text-align:center;">
+        <span style="font-size:24px;color:#94a3b8;">✓</span>
+        <p style="margin:8px 0 0;color:var(--muted);font-size:13px;">事件已结案，状态不可再变更</p>
+        <?php if (!empty($case['closed_at'])): ?>
+            <p style="margin:4px 0 0;color:var(--muted);font-size:12px;">结案时间：<?= h($case['closed_at']) ?></p>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 </section>
 
 <?php if ($has_ambulance): ?>
@@ -207,6 +314,67 @@
 </section>
 <?php endif; ?>
 
+<section class="panel case-audit-section">
+    <div class="panel-head">
+        <h2>事件状态变更记录</h2>
+        <span>流转留痕 · 操作追溯 · 监管审计</span>
+    </div>
+    <?php if (empty($case_audit_available)): ?>
+        <div class="alerts-empty">
+            <p class="muted">⚠ 事件状态审计功能待初始化</p>
+            <p class="muted" style="font-size: 12px; margin-top: 6px;">
+                数据库表 <code>case_status_audit</code> 尚未创建，系统已触发自动迁移。请刷新页面或联系管理员执行迁移脚本。
+            </p>
+        </div>
+    <?php elseif (empty($case_audit_logs)): ?>
+        <div class="alerts-empty muted">
+            <p>暂无状态变更记录</p>
+            <p style="font-size:12px;margin-top:6px;">事件初始状态：<span class="status-tag-small <?= statusClass($case['status']) ?>"><?= statusText($case['status']) ?></span></p>
+        </div>
+    <?php else: ?>
+        <div class="audit-log-list">
+            <table class="case-status-audit-table">
+                <thead>
+                    <tr>
+                        <th style="width:140px;">时间</th>
+                        <th>状态变更</th>
+                        <th>操作人</th>
+                        <th>备注说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($case_audit_logs as $log): ?>
+                        <tr class="audit-log-row">
+                            <td class="cs-audit-time">
+                                <span class="date"><?= h(date('Y-m-d', strtotime($log['created_at'] ?? ''))) ?></span><br>
+                                <span class="clock"><?= h(date('H:i:s', strtotime($log['created_at'] ?? ''))) ?></span>
+                            </td>
+                            <td>
+                                <div class="cs-audit-transition">
+                                    <span class="status-tag-small status-<?= h($log['old_status']) ?>"><?= statusText($log['old_status']) ?></span>
+                                    <span class="status-transition-arrow">→</span>
+                                    <span class="status-tag-small status-<?= h($log['new_status']) ?>"><?= statusText($log['new_status']) ?></span>
+                                </div>
+                            </td>
+                            <td class="cs-audit-operator">
+                                <strong><?= h($log['operator_name'] ?? '—') ?></strong>
+                                <small><?= h($log['operator_role'] ?? 'unknown') ?></small>
+                            </td>
+                            <td>
+                                <?php if (!empty($log['transition_notes'])): ?>
+                                    <span class="cs-audit-notes"><?= h($log['transition_notes']) ?></span>
+                                <?php else: ?>
+                                    <span class="muted" style="font-size:12px;">—</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+
 <?php if ($has_ambulance): ?>
 <section class="panel audit-panel case-detail-audit">
     <div class="panel-head">
@@ -279,6 +447,8 @@
                             <td class="audit-type">
                                 <?php if (($log['change_type'] ?? '') === 'dispatch'): ?>
                                     <span class="audit-type-tag dispatch">派车联动</span>
+                                <?php elseif (($log['change_type'] ?? '') === 'case_status'): ?>
+                                    <span class="audit-type-tag dispatch">事件流转联动</span>
                                 <?php else: ?>
                                     <span class="audit-type-tag manual">手动更新</span>
                                 <?php endif; ?>

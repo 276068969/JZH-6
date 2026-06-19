@@ -86,10 +86,21 @@ final class AppController
         $lastCreatedCase = $_SESSION['_last_created_case'] ?? null;
         unset($_SESSION['_last_created_case']);
 
+        $lastStatusChangedCase = $_SESSION['_last_status_changed_case'] ?? null;
+        $lastStatusChangeInfo = $_SESSION['_last_status_change_info'] ?? null;
+        unset($_SESSION['_last_status_changed_case'], $_SESSION['_last_status_change_info']);
+
+        $cases = $this->repo->casesWithAmbulanceInfo();
+        $caseStatusActions = [];
+        foreach ($cases as $c) {
+            $caseStatusActions[$c['case_no']] = $this->repo->getNextStatusActions($c['status']);
+        }
+
         View::render('admin', [
             'overview' => $this->repo->overview(),
             'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
-            'cases' => $this->repo->casesWithAmbulanceInfo(),
+            'cases' => $cases,
+            'case_status_actions' => $caseStatusActions,
             'alerts' => $this->repo->alerts(),
             'open_alerts' => $this->repo->openAlerts(),
             'resolved_alerts' => $this->repo->resolvedAlerts(),
@@ -98,6 +109,8 @@ final class AppController
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
             'last_created_case' => $lastCreatedCase,
+            'last_status_changed_case' => $lastStatusChangedCase,
+            'last_status_change_info' => $lastStatusChangeInfo,
         ]);
     }
 
@@ -396,14 +409,22 @@ final class AppController
 
         $statusAuditLogs = [];
         $auditTableAvailable = false;
+        $caseAuditLogs = [];
+        $caseAuditAvailable = false;
         try {
             $auditTableAvailable = $this->repo->isAuditTableAvailable();
             if ($auditTableAvailable && $hasAmbulance) {
                 $statusAuditLogs = $this->repo->recentStatusAuditLogsForCase($caseNo, 10);
             }
+            $caseAuditAvailable = $this->repo->isCaseAuditTableAvailable();
+            if ($caseAuditAvailable) {
+                $caseAuditLogs = $this->repo->recentCaseStatusAuditLogsForCase($caseNo, 20);
+            }
         } catch (\Throwable $e) {
             error_log('加载审计日志失败: ' . $e->getMessage());
         }
+
+        $nextStatusActions = $this->repo->getNextStatusActions($case['status']);
 
         View::render('case_detail', [
             'case' => $case,
@@ -411,6 +432,9 @@ final class AppController
             'has_ambulance' => $hasAmbulance,
             'status_audit_logs' => $statusAuditLogs,
             'audit_table_available' => $auditTableAvailable,
+            'case_audit_logs' => $caseAuditLogs,
+            'case_audit_available' => $caseAuditAvailable,
+            'next_status_actions' => $nextStatusActions,
             'user' => Auth::user(),
             'flash' => $this->getFlash(),
         ]);
@@ -528,6 +552,100 @@ final class AppController
         }
 
         header('Location: /admin/ambulances/profile');
+    }
+
+    public function transitionCaseStatus(): void
+    {
+        Auth::requireAdmin();
+        $user = Auth::user();
+
+        $caseNo = trim($_POST['case_no'] ?? '');
+        $newStatus = $_POST['new_status'] ?? '';
+        $notes = trim($_POST['transition_notes'] ?? '');
+        $redirectTo = trim($_POST['redirect_to'] ?? '');
+
+        $errors = [];
+        if ($caseNo === '') {
+            $errors[] = '无效的事件编号';
+        }
+        if ($newStatus === '') {
+            $errors[] = '请指定目标状态';
+        }
+
+        if (!empty($errors)) {
+            $this->setFlash('errors', $errors);
+            $redirect = $redirectTo !== '' ? $redirectTo : '/admin';
+            header('Location: ' . $redirect);
+            return;
+        }
+
+        $result = $this->repo->updateCaseStatus(
+            $caseNo,
+            $newStatus,
+            (int)$user['id'],
+            $user['name'],
+            $user['role'],
+            $notes === '' ? null : $notes
+        );
+
+        if (!$result['success']) {
+            $this->setFlash('errors', $result['errors']);
+        } else {
+            $this->setFlash('success', [$result['message']]);
+            if (!empty($result['warnings'])) {
+                $this->setFlash('warnings', $result['warnings']);
+            }
+            $_SESSION['_last_status_changed_case'] = $caseNo;
+            $_SESSION['_last_status_change_info'] = [
+                'old' => $result['old_status'],
+                'new' => $result['new_status'],
+            ];
+        }
+
+        if ($redirectTo !== '') {
+            header('Location: ' . $redirectTo);
+        } else {
+            header('Location: /admin');
+        }
+    }
+
+    public function caseStatusTransitionsApi(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        Auth::requireAdmin();
+
+        try {
+            $caseNo = trim($_GET['case_no'] ?? '');
+            if ($caseNo === '') {
+                echo json_encode([
+                    'success' => false,
+                    'errors' => ['请指定事件编号'],
+                ], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $case = $this->repo->findCaseByCaseNo($caseNo);
+            if (!$case) {
+                echo json_encode([
+                    'success' => false,
+                    'errors' => ['事件不存在'],
+                ], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $actions = $this->repo->getNextStatusActions($case['status']);
+
+            echo json_encode([
+                'success' => true,
+                'case_no' => $caseNo,
+                'current_status' => $case['status'],
+                'current_label' => statusText($case['status']),
+                'actions' => $actions,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('caseStatusTransitionsApi 异常: ' . $e->getMessage());
+            ErrorResponse::databaseError('获取状态流转信息失败，请稍后重试');
+        }
     }
 
     private function setFlash(string $type, array $messages): void

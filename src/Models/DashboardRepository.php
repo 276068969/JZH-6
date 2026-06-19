@@ -940,4 +940,305 @@ final class DashboardRepository
             ],
         ];
     }
+
+    public function caseStatusTransitions(): array
+    {
+        return [
+            'reported' => [
+                'label' => '已上报',
+                'allowed_next' => ['accepted', 'closed'],
+                'actions' => [
+                    'accepted' => [
+                        'label' => '受理事件',
+                        'description' => '调度员已受理，救护车前往现场或正在处置',
+                        'button_class' => 'btn-accept',
+                        'confirm' => '确认将事件状态推进到「已受理」？受理后将进入现场处置流程。',
+                    ],
+                    'closed' => [
+                        'label' => '取消/关闭',
+                        'description' => '事件无需处置，如误报、取消呼叫等',
+                        'button_class' => 'btn-close',
+                        'confirm' => '确认直接关闭该事件？关闭后将不再参与进行中事件统计。',
+                    ],
+                ],
+            ],
+            'accepted' => [
+                'label' => '已受理',
+                'allowed_next' => ['closed'],
+                'actions' => [
+                    'closed' => [
+                        'label' => '结案关闭',
+                        'description' => '患者已送达医院或处置完成，事件正式结案',
+                        'button_class' => 'btn-close',
+                        'confirm' => '确认结案并关闭事件？关闭后车辆将自动回归待命状态（如无其他任务）。',
+                    ],
+                ],
+            ],
+            'closed' => [
+                'label' => '已关闭',
+                'allowed_next' => [],
+                'actions' => [],
+            ],
+        ];
+    }
+
+    public function isCaseStatusTransitionAllowed(string $oldStatus, string $newStatus): bool
+    {
+        $transitions = $this->caseStatusTransitions();
+        if (!isset($transitions[$oldStatus])) {
+            return false;
+        }
+        return in_array($newStatus, $transitions[$oldStatus]['allowed_next'], true);
+    }
+
+    public function getNextStatusActions(string $currentStatus): array
+    {
+        $transitions = $this->caseStatusTransitions();
+        if (!isset($transitions[$currentStatus])) {
+            return [];
+        }
+        return $transitions[$currentStatus]['actions'];
+    }
+
+    private function isCaseAuditTableExists(): bool
+    {
+        try {
+            $stmt = $this->db()->query(
+                "SELECT COUNT(*) FROM information_schema.tables 
+                 WHERE table_schema = DATABASE() 
+                 AND table_name = 'case_status_audit'"
+            );
+            return (int)$stmt->fetchColumn() > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public function isCaseAuditTableAvailable(): bool
+    {
+        return $this->isCaseAuditTableExists();
+    }
+
+    private function logCaseStatusChange(
+        int $caseId,
+        string $caseNo,
+        string $oldStatus,
+        string $newStatus,
+        int $changedBy,
+        string $operatorName,
+        string $operatorRole,
+        ?string $transitionNotes = null
+    ): void {
+        try {
+            if (!$this->isCaseAuditTableExists()) {
+                return;
+            }
+
+            $stmt = $this->db()->prepare(
+                'INSERT INTO case_status_audit 
+                 (case_id, case_no, old_status, new_status, changed_by, 
+                  operator_name, operator_role, transition_notes, created_at)
+                 VALUES 
+                 (:case_id, :case_no, :old_status, :new_status, :changed_by,
+                  :operator_name, :operator_role, :transition_notes, NOW())'
+            );
+            $stmt->execute([
+                'case_id' => $caseId,
+                'case_no' => $caseNo,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'changed_by' => $changedBy,
+                'operator_name' => $operatorName,
+                'operator_role' => $operatorRole,
+                'transition_notes' => $transitionNotes,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('记录事件状态审计日志失败: ' . $e->getMessage());
+        }
+    }
+
+    public function recentCaseStatusAuditLogsForCase(string $caseNo, int $limit = 20): array
+    {
+        try {
+            if (!$this->isCaseAuditTableExists()) {
+                return [];
+            }
+
+            $sql = 'SELECT * FROM case_status_audit 
+                     WHERE case_no = :case_no 
+                     ORDER BY created_at DESC 
+                     LIMIT :limit';
+            $stmt = $this->db()->prepare($sql);
+            $stmt->bindValue('case_no', $caseNo);
+            $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            error_log('查询事件状态审计日志失败: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    public function validateCaseStatusTransition(string $caseNo, string $newStatus): array
+    {
+        $errors = [];
+        $validStatuses = ['reported', 'accepted', 'closed'];
+
+        if (!in_array($newStatus, $validStatuses, true)) {
+            $errors[] = '无效的目标状态：' . $newStatus;
+            return ['errors' => $errors, 'case' => null];
+        }
+
+        $case = $this->findCaseByCaseNo($caseNo);
+        if (!$case) {
+            $errors[] = '事件不存在';
+            return ['errors' => $errors, 'case' => null];
+        }
+
+        $oldStatus = $case['status'];
+        if ($oldStatus === $newStatus) {
+            $errors[] = '事件已处于「' . statusText($oldStatus) . '」状态，无需重复操作';
+            return ['errors' => $errors, 'case' => $case];
+        }
+
+        if (!$this->isCaseStatusTransitionAllowed($oldStatus, $newStatus)) {
+            $transitions = $this->caseStatusTransitions();
+            $currentLabel = $transitions[$oldStatus]['label'] ?? $oldStatus;
+            $targetLabel = $transitions[$newStatus]['label'] ?? $newStatus;
+            $errors[] = '不允许的状态流转：无法从「' . $currentLabel . '」直接变更为「' . $targetLabel . '」';
+        }
+
+        return ['errors' => $errors, 'case' => $case];
+    }
+
+    public function updateCaseStatus(
+        string $caseNo,
+        string $newStatus,
+        int $changedBy,
+        string $operatorName,
+        string $operatorRole,
+        ?string $notes = null
+    ): array {
+        $warnings = [];
+
+        $validation = $this->validateCaseStatusTransition($caseNo, $newStatus);
+        if (!empty($validation['errors'])) {
+            return ['success' => false, 'errors' => $validation['errors']];
+        }
+        $case = $validation['case'];
+        $oldStatus = $case['status'];
+        $caseId = (int)$case['id'];
+        $assignedAmbulanceCode = $case['assigned_ambulance'];
+
+        $this->db()->beginTransaction();
+        try {
+            $updateFields = ['status = :status'];
+            $params = [
+                'case_no' => $caseNo,
+                'status' => $newStatus,
+            ];
+
+            if ($newStatus === 'accepted' && empty($case['accepted_at'])) {
+                $updateFields[] = 'accepted_at = NOW()';
+            }
+            if ($newStatus === 'closed' && empty($case['closed_at'])) {
+                $updateFields[] = 'closed_at = NOW()';
+            }
+
+            $sql = 'UPDATE emergency_cases SET ' . implode(', ', $updateFields) . ' WHERE case_no = :case_no';
+            $stmt = $this->db()->prepare($sql);
+            $stmt->execute($params);
+
+            $this->logCaseStatusChange(
+                $caseId,
+                $caseNo,
+                $oldStatus,
+                $newStatus,
+                $changedBy,
+                $operatorName,
+                $operatorRole,
+                $notes
+            );
+
+            if (!empty($assignedAmbulanceCode)) {
+                $ambulance = $this->getAmbulanceByCode($assignedAmbulanceCode);
+                if ($ambulance) {
+                    $ambOldStatus = $ambulance['status'];
+                    $targetVehicleStatus = null;
+
+                    if ($newStatus === 'accepted') {
+                        $inServiceStatuses = ['standby', 'dispatching'];
+                        if (in_array($ambOldStatus, $inServiceStatuses, true)) {
+                            $targetVehicleStatus = 'on_scene';
+                        }
+                    } elseif ($newStatus === 'closed') {
+                        $stmt2 = $this->db()->prepare(
+                            'SELECT COUNT(*) FROM emergency_cases 
+                             WHERE assigned_ambulance = :code AND status != "closed" AND case_no != :case_no'
+                        );
+                        $stmt2->execute([
+                            'code' => $assignedAmbulanceCode,
+                            'case_no' => $caseNo,
+                        ]);
+                        $otherActiveCount = (int)$stmt2->fetchColumn();
+
+                        if ($otherActiveCount === 0) {
+                            $serviceStatuses = ['dispatching', 'on_scene', 'transporting'];
+                            if (in_array($ambOldStatus, $serviceStatuses, true)) {
+                                $targetVehicleStatus = 'standby';
+                                $warnings[] = '事件结案，关联车辆 ' . $assignedAmbulanceCode . ' 已自动回归待命状态';
+                            }
+                        } else {
+                            $warnings[] = '关联车辆 ' . $assignedAmbulanceCode . ' 仍有其他进行中事件，未变更车辆状态';
+                        }
+                    }
+
+                    if ($targetVehicleStatus !== null && $ambOldStatus !== $targetVehicleStatus) {
+                        $stmt3 = $this->db()->prepare(
+                            'UPDATE ambulances SET status = :status, updated_at = NOW() WHERE code = :code'
+                        );
+                        $stmt3->execute([
+                            'code' => $assignedAmbulanceCode,
+                            'status' => $targetVehicleStatus,
+                        ]);
+
+                        $this->logAmbulanceStatusChange(
+                            (int)$ambulance['id'],
+                            $assignedAmbulanceCode,
+                            $ambOldStatus,
+                            $targetVehicleStatus,
+                            $ambulance['location'],
+                            $ambulance['location'],
+                            $changedBy,
+                            $operatorName,
+                            $operatorRole,
+                            'case_status',
+                            $caseNo
+                        );
+                    }
+                }
+            }
+
+            $this->db()->commit();
+
+            $transitions = $this->caseStatusTransitions();
+            $oldLabel = $transitions[$oldStatus]['label'] ?? $oldStatus;
+            $newLabel = $transitions[$newStatus]['label'] ?? $newStatus;
+
+            return [
+                'success' => true,
+                'case_no' => $caseNo,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'old_label' => $oldLabel,
+                'new_label' => $newLabel,
+                'message' => '事件 ' . $caseNo . ' 状态已从「' . $oldLabel . '」变更为「' . $newLabel . '」',
+                'warnings' => $warnings,
+            ];
+        } catch (\Throwable $e) {
+            $this->db()->rollBack();
+            error_log('更新事件状态失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['事件状态更新失败，请稍后重试']];
+        }
+    }
 }
