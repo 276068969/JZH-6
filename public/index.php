@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/Core/Database.php';
 require_once __DIR__ . '/../src/Core/MigrationRunner.php';
 require_once __DIR__ . '/../src/Core/Auth.php';
+require_once __DIR__ . '/../src/Core/ErrorResponse.php';
 require_once __DIR__ . '/../src/Core/View.php';
 require_once __DIR__ . '/../templates/helpers.php';
 require_once __DIR__ . '/../src/Models/DashboardRepository.php';
@@ -57,6 +58,5 @@ try {
         echo '页面不存在';
     }
 } catch (Throwable $exception) {
-    http_response_code(500);
-    echo '系统暂时不可用：' . htmlspecialchars($exception->getMessage(), ENT_QUOTES, 'UTF-8');
+    \App\Core\ErrorResponse::handleException($exception, $path);
 }

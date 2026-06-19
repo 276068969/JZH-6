@@ -161,7 +161,8 @@ final class DashboardRepository
             ];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['处置失败：' . $e->getMessage()]];
+            error_log('处置告警失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['告警处置失败，请稍后重试']];
         }
     }
 
@@ -510,7 +511,8 @@ final class DashboardRepository
             return ['success' => true, 'warnings' => $warnings];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
+            error_log('更新车辆失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['车辆更新失败，请稍后重试']];
         }
     }
 
@@ -617,7 +619,8 @@ final class DashboardRepository
             ];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['保存失败：' . $e->getMessage()]];
+            error_log('创建事件失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['事件保存失败，请稍后重试']];
         }
     }
 
@@ -734,7 +737,8 @@ final class DashboardRepository
             ];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['创建失败：' . $e->getMessage()]];
+            error_log('创建救护车档案失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['救护车档案创建失败，请稍后重试']];
         }
     }
 
@@ -835,7 +839,8 @@ final class DashboardRepository
             ];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
+            error_log('更新救护车档案失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['救护车档案更新失败，请稍后重试']];
         }
     }
 
@@ -862,7 +867,8 @@ final class DashboardRepository
             return ['success' => true, 'code' => $ambulance['code']];
         } catch (\Throwable $e) {
             $this->db->rollBack();
-            return ['success' => false, 'errors' => ['删除失败：' . $e->getMessage()]];
+            error_log('删除救护车档案失败: ' . $e->getMessage());
+            return ['success' => false, 'errors' => ['救护车档案删除失败，请稍后重试']];
         }
     }
 

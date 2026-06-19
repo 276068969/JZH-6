@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Auth;
+use App\Core\ErrorResponse;
 use App\Core\View;
 use App\Models\DashboardRepository;
 
@@ -41,6 +42,19 @@ final class AppController
     {
         $username = trim($_POST['username'] ?? '');
         $password = trim($_POST['password'] ?? '');
+
+        $errors = [];
+        if ($username === '') {
+            $errors[] = '请输入账号';
+        }
+        if ($password === '') {
+            $errors[] = '请输入密码';
+        }
+
+        if (!empty($errors)) {
+            $this->loginForm(implode('；', $errors));
+            return;
+        }
 
         if (Auth::attempt($username, $password)) {
             header('Location: /admin');
@@ -110,13 +124,44 @@ final class AppController
     {
         Auth::requireAdmin();
         $user = Auth::user();
+
+        $patientName = trim($_POST['patient_name'] ?? '');
+        $address = trim($_POST['address'] ?? '');
+        $priority = $_POST['priority'] ?? 'medium';
+        $status = $_POST['status'] ?? 'reported';
+        $assignedAmbulance = trim($_POST['assigned_ambulance'] ?? '');
+
+        $errors = [];
+        if ($patientName === '') {
+            $errors[] = '请填写患者/呼叫人姓名';
+        }
+        if ($address === '') {
+            $errors[] = '请填写事件地址';
+        }
+
+        $validPriorities = ['high', 'medium', 'low'];
+        if (!in_array($priority, $validPriorities, true)) {
+            $errors[] = '无效的优先级';
+        }
+
+        $validStatuses = ['reported', 'accepted'];
+        if (!in_array($status, $validStatuses, true)) {
+            $errors[] = '无效的事件状态';
+        }
+
+        if (!empty($errors)) {
+            $this->setFlash('errors', $errors);
+            header('Location: /admin');
+            return;
+        }
+
         $result = $this->repo->createCaseWithDispatch(
             [
-                'patient_name' => trim($_POST['patient_name'] ?? '待确认'),
-                'priority' => $_POST['priority'] ?? 'medium',
-                'address' => trim($_POST['address'] ?? ''),
-                'status' => $_POST['status'] ?? 'reported',
-                'assigned_ambulance' => trim($_POST['assigned_ambulance'] ?? ''),
+                'patient_name' => $patientName,
+                'priority' => $priority,
+                'address' => $address,
+                'status' => $status,
+                'assigned_ambulance' => $assignedAmbulance,
             ],
             (int)$user['id'],
             $user['name'],
@@ -145,10 +190,35 @@ final class AppController
     {
         Auth::requireAdmin();
         $user = Auth::user();
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $status = $_POST['status'] ?? 'standby';
+        $location = trim($_POST['location'] ?? '');
+
+        $errors = [];
+        if ($id <= 0) {
+            $errors[] = '请选择有效的车辆';
+        }
+
+        $validStatuses = ['standby', 'dispatching', 'on_scene', 'transporting', 'maintenance'];
+        if (!in_array($status, $validStatuses, true)) {
+            $errors[] = '无效的车辆状态';
+        }
+
+        if ($status === 'standby' && $location === '') {
+            $errors[] = '待命车辆必须填写当前位置';
+        }
+
+        if (!empty($errors)) {
+            $this->setFlash('errors', $errors);
+            header('Location: /admin');
+            return;
+        }
+
         $result = $this->repo->updateAmbulanceWithLinkage(
-            (int) ($_POST['id'] ?? 0),
-            $_POST['status'] ?? 'standby',
-            trim($_POST['location'] ?? ''),
+            $id,
+            $status,
+            $location,
             (int)$user['id'],
             $user['name'],
             $user['role']
@@ -169,106 +239,121 @@ final class AppController
     public function overviewApi(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        $overview = $this->repo->overview();
-        echo json_encode([
-            'overview' => $overview,
-            'ambulances' => $this->repo->ambulances(),
-            'cases' => $this->repo->cases(),
-            'alerts' => $this->repo->alerts(),
-            'aggregations' => [
-                'ambulance_by_status' => $overview['ambulance_status_breakdown'],
-                'case_by_priority' => $overview['case_priority_breakdown'],
-                'alert_by_status' => $overview['alert_status_breakdown'],
-            ],
-        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            $overview = $this->repo->overview();
+            $ambulances = $this->repo->ambulances();
+            $cases = $this->repo->cases();
+            $alerts = $this->repo->alerts();
+
+            echo json_encode([
+                'success' => true,
+                'overview' => $overview,
+                'ambulances' => $ambulances,
+                'cases' => $cases,
+                'alerts' => $alerts,
+                'aggregations' => [
+                    'ambulance_by_status' => $overview['ambulance_status_breakdown'],
+                    'case_by_priority' => $overview['case_priority_breakdown'],
+                    'alert_by_status' => $overview['alert_status_breakdown'],
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('api/overview 异常: ' . $e->getMessage());
+            ErrorResponse::databaseError('获取概览数据失败，请稍后重试');
+        }
     }
 
     public function dispatchCheckApi(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        $code = trim($_GET['code'] ?? '');
-        if ($code === '') {
-            echo json_encode(['available' => false, 'reason' => '请输入车辆编号'], JSON_UNESCAPED_UNICODE);
-            return;
+
+        try {
+            $code = trim($_GET['code'] ?? '');
+            if ($code === '') {
+                echo json_encode([
+                    'success' => true,
+                    'available' => false,
+                    'reason' => '请输入车辆编号'
+                ], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $result = $this->repo->ambulanceDispatchCheckApi($code);
+            echo json_encode(
+                array_merge(['success' => true], $result),
+                JSON_UNESCAPED_UNICODE
+            );
+        } catch (\Throwable $e) {
+            error_log('dispatchCheckApi 异常: ' . $e->getMessage());
+            ErrorResponse::databaseError('查询车辆状态失败，请稍后重试');
         }
-        echo json_encode(
-            $this->repo->ambulanceDispatchCheckApi($code),
-            JSON_UNESCAPED_UNICODE
-        );
     }
 
     public function updateAmbulanceApi(): void
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!is_array($input)) {
-            $input = $_POST;
-        }
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($input)) {
+                $input = $_POST;
+            }
 
-        $id = (int) ($input['id'] ?? 0);
-        $status = $input['status'] ?? 'standby';
-        $location = trim($input['location'] ?? '');
+            $id = (int) ($input['id'] ?? 0);
+            $status = $input['status'] ?? 'standby';
+            $location = trim($input['location'] ?? '');
 
-        if ($id <= 0) {
-            http_response_code(400);
+            if ($id <= 0) {
+                ErrorResponse::invalidParams(['无效的车辆ID'], '无效的车辆ID');
+                return;
+            }
+
+            $validStatuses = ['standby', 'dispatching', 'on_scene', 'transporting', 'maintenance'];
+            if (!in_array($status, $validStatuses, true)) {
+                ErrorResponse::invalidParams(['无效的车辆状态'], '无效的车辆状态');
+                return;
+            }
+
+            if ($status === 'standby' && $location === '') {
+                ErrorResponse::validationError(['待命车辆必须填写当前位置'], '数据校验失败');
+                return;
+            }
+
+            $user = Auth::user();
+            if (!$user) {
+                ErrorResponse::unauthorized();
+                return;
+            }
+
+            if ($user['role'] !== 'admin') {
+                ErrorResponse::forbidden();
+                return;
+            }
+
+            $result = $this->repo->updateAmbulanceWithLinkage(
+                $id,
+                $status,
+                $location,
+                (int)$user['id'],
+                $user['name'],
+                $user['role']
+            );
+
+            if (!$result['success']) {
+                ErrorResponse::validationError($result['errors']);
+                return;
+            }
+
             echo json_encode([
-                'success' => false,
-                'error_code' => 'INVALID_ID',
-                'message' => '无效的车辆ID',
-                'errors' => ['无效的车辆ID'],
+                'success' => true,
+                'message' => '车辆状态更新成功',
+                'warnings' => $result['warnings'] ?? [],
             ], JSON_UNESCAPED_UNICODE);
-            return;
+        } catch (\Throwable $e) {
+            error_log('updateAmbulanceApi 异常: ' . $e->getMessage());
+            ErrorResponse::databaseError('车辆更新失败，请稍后重试');
         }
-
-        $user = Auth::user();
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode([
-                'success' => false,
-                'error_code' => 'UNAUTHORIZED',
-                'message' => '请先登录',
-                'errors' => ['请先登录'],
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-        }
-
-        if ($user['role'] !== 'admin') {
-            http_response_code(403);
-            echo json_encode([
-                'success' => false,
-                'error_code' => 'FORBIDDEN',
-                'message' => '无权限执行此操作',
-                'errors' => ['无权限执行此操作'],
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-        }
-
-        $result = $this->repo->updateAmbulanceWithLinkage(
-            $id,
-            $status,
-            $location,
-            (int)$user['id'],
-            $user['name'],
-            $user['role']
-        );
-
-        if (!$result['success']) {
-            http_response_code(422);
-            echo json_encode([
-                'success' => false,
-                'error_code' => 'VALIDATION_ERROR',
-                'message' => '数据校验失败',
-                'errors' => $result['errors'],
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-        }
-
-        echo json_encode([
-            'success' => true,
-            'message' => '车辆状态更新成功',
-            'warnings' => $result['warnings'] ?? [],
-        ], JSON_UNESCAPED_UNICODE);
     }
 
     public function caseDetail(string $caseNo): void

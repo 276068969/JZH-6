@@ -52,31 +52,36 @@ final class Auth
 
     public static function attempt(string $username, string $password): bool
     {
-        $stmt = Database::connection()->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
-        $stmt->execute(['username' => $username]);
-        $user = $stmt->fetch();
+        try {
+            $stmt = Database::connection()->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
+            $stmt->execute(['username' => $username]);
+            $user = $stmt->fetch();
 
-        if (!$user || !hash_equals($user['password_hash'], hash('sha256', $password))) {
+            if (!$user || !hash_equals($user['password_hash'], hash('sha256', $password))) {
+                return false;
+            }
+
+            if ($user['status'] !== 'enabled') {
+                return false;
+            }
+
+            self::regenerateSession();
+
+            $_SESSION[self::SESSION_USER_KEY] = [
+                'id' => (int) $user['id'],
+                'name' => $user['name'],
+                'username' => $user['username'],
+                'role' => $user['role'],
+            ];
+
+            self::setSessionFingerprint();
+            self::updateActivityTimestamps();
+
+            return true;
+        } catch (\Throwable $e) {
+            error_log('登录验证异常: ' . $e->getMessage());
             return false;
         }
-
-        if ($user['status'] !== 'enabled') {
-            return false;
-        }
-
-        self::regenerateSession();
-
-        $_SESSION[self::SESSION_USER_KEY] = [
-            'id' => (int) $user['id'],
-            'name' => $user['name'],
-            'username' => $user['username'],
-            'role' => $user['role'],
-        ];
-
-        self::setSessionFingerprint();
-        self::updateActivityTimestamps();
-
-        return true;
     }
 
     public static function requireLogin(): void
