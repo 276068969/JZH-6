@@ -15,12 +15,12 @@ use App\Controllers\AppController;
 
 session_start();
 
-$controller = new AppController();
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = $method === 'HEAD' ? 'GET' : $method;
 
 try {
+    $controller = new AppController();
     if ($path === '/' && $method === 'GET') {
         $controller->home();
     } elseif ($path === '/login' && $method === 'GET') {

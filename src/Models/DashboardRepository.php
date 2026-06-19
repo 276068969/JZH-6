@@ -9,20 +9,23 @@ use PDO;
 
 final class DashboardRepository
 {
-    private PDO $db;
+    private ?PDO $db = null;
 
-    public function __construct()
+    private function db(): PDO
     {
-        $this->db = Database::connection();
+        if ($this->db === null) {
+            $this->db = Database::connection();
+        }
+        return $this->db;
     }
 
     public function overview(): array
     {
         return [
-            'ambulances_total' => (int) $this->db->query('SELECT COUNT(*) FROM ambulances')->fetchColumn(),
-            'ambulances_online' => (int) $this->db->query('SELECT COUNT(*) FROM ambulances WHERE status IN ("standby", "dispatching", "on_scene", "transporting")')->fetchColumn(),
-            'active_cases' => (int) $this->db->query('SELECT COUNT(*) FROM emergency_cases WHERE status != "closed"')->fetchColumn(),
-            'alerts' => (int) $this->db->query('SELECT COUNT(*) FROM alerts WHERE status = "open"')->fetchColumn(),
+            'ambulances_total' => (int) $this->db()->query('SELECT COUNT(*) FROM ambulances')->fetchColumn(),
+            'ambulances_online' => (int) $this->db()->query('SELECT COUNT(*) FROM ambulances WHERE status IN ("standby", "dispatching", "on_scene", "transporting")')->fetchColumn(),
+            'active_cases' => (int) $this->db()->query('SELECT COUNT(*) FROM emergency_cases WHERE status != "closed"')->fetchColumn(),
+            'alerts' => (int) $this->db()->query('SELECT COUNT(*) FROM alerts WHERE status = "open"')->fetchColumn(),
             'ambulance_status_breakdown' => $this->ambulanceStatusBreakdown(),
             'case_priority_breakdown' => $this->casePriorityBreakdown(),
             'alert_status_breakdown' => $this->alertStatusBreakdown(),
@@ -32,7 +35,7 @@ final class DashboardRepository
     public function ambulanceStatusBreakdown(): array
     {
         $sql = 'SELECT status, COUNT(*) as count FROM ambulances GROUP BY status';
-        $rows = $this->db->query($sql)->fetchAll();
+        $rows = $this->db()->query($sql)->fetchAll();
         $result = [];
         foreach ($rows as $row) {
             $result[$row['status']] = (int) $row['count'];
@@ -49,7 +52,7 @@ final class DashboardRepository
     public function casePriorityBreakdown(): array
     {
         $sql = 'SELECT priority, COUNT(*) as count FROM emergency_cases GROUP BY priority';
-        $rows = $this->db->query($sql)->fetchAll();
+        $rows = $this->db()->query($sql)->fetchAll();
         $result = [];
         foreach ($rows as $row) {
             $result[$row['priority']] = (int) $row['count'];
@@ -66,7 +69,7 @@ final class DashboardRepository
     public function alertStatusBreakdown(): array
     {
         $sql = 'SELECT status, COUNT(*) as count FROM alerts GROUP BY status';
-        $rows = $this->db->query($sql)->fetchAll();
+        $rows = $this->db()->query($sql)->fetchAll();
         $result = [];
         foreach ($rows as $row) {
             $result[$row['status']] = (int) $row['count'];
@@ -82,12 +85,12 @@ final class DashboardRepository
 
     public function ambulances(): array
     {
-        return $this->db->query('SELECT * FROM ambulances ORDER BY FIELD(status, "dispatching", "on_scene", "transporting", "standby", "maintenance"), code')->fetchAll();
+        return $this->db()->query('SELECT * FROM ambulances ORDER BY FIELD(status, "dispatching", "on_scene", "transporting", "standby", "maintenance"), code')->fetchAll();
     }
 
     public function cases(): array
     {
-        return $this->db->query('SELECT * FROM emergency_cases ORDER BY created_at DESC LIMIT 12')->fetchAll();
+        return $this->db()->query('SELECT * FROM emergency_cases ORDER BY created_at DESC LIMIT 12')->fetchAll();
     }
 
     public function alerts(): array
@@ -96,7 +99,7 @@ final class DashboardRepository
                 FROM alerts a 
                 LEFT JOIN users u ON a.handled_by = u.id 
                 ORDER BY a.created_at DESC LIMIT 12';
-        return $this->db->query($sql)->fetchAll();
+        return $this->db()->query($sql)->fetchAll();
     }
 
     public function openAlerts(): array
@@ -106,7 +109,7 @@ final class DashboardRepository
                 LEFT JOIN users u ON a.handled_by = u.id 
                 WHERE a.status = "open" 
                 ORDER BY a.created_at DESC';
-        return $this->db->query($sql)->fetchAll();
+        return $this->db()->query($sql)->fetchAll();
     }
 
     public function resolvedAlerts(): array
@@ -116,12 +119,12 @@ final class DashboardRepository
                 LEFT JOIN users u ON a.handled_by = u.id 
                 WHERE a.status = "resolved" 
                 ORDER BY a.handled_at DESC LIMIT 10';
-        return $this->db->query($sql)->fetchAll();
+        return $this->db()->query($sql)->fetchAll();
     }
 
     public function handleAlert(int $id, string $handlingNotes, int $handledBy): array
     {
-        $stmt = $this->db->prepare('SELECT * FROM alerts WHERE id = :id LIMIT 1');
+        $stmt = $this->db()->prepare('SELECT * FROM alerts WHERE id = :id LIMIT 1');
         $stmt->execute(['id' => $id]);
         $alert = $stmt->fetch();
 
@@ -138,9 +141,9 @@ final class DashboardRepository
             return ['success' => false, 'errors' => ['请填写处置说明']];
         }
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'UPDATE alerts 
                  SET status = "resolved", 
                      handling_notes = :notes, 
@@ -154,13 +157,13 @@ final class DashboardRepository
                 'handled_by' => $handledBy,
             ]);
 
-            $this->db->commit();
+            $this->db()->commit();
             return [
                 'success' => true,
                 'alert' => $alert,
             ];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('处置告警失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['告警处置失败，请稍后重试']];
         }
@@ -170,7 +173,7 @@ final class DashboardRepository
     {
         $prefix = 'CASE' . date('Ymd');
 
-        $stmt = $this->db->prepare(
+        $stmt = $this->db()->prepare(
             'SELECT MAX(case_no) FROM emergency_cases WHERE case_no LIKE :prefix FOR UPDATE'
         );
         $stmt->execute(['prefix' => $prefix . '%']);
@@ -187,10 +190,10 @@ final class DashboardRepository
 
     public function createCase(array $data): void
     {
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
             $caseNo = $this->generateCaseNo();
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
                  VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
             );
@@ -202,16 +205,16 @@ final class DashboardRepository
                 'status' => $data['status'],
                 'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
             ]);
-            $this->db->commit();
+            $this->db()->commit();
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             throw $e;
         }
     }
 
     public function updateAmbulance(int $id, string $status, string $location): void
     {
-        $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
+        $stmt = $this->db()->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
         $stmt->execute([
             'id' => $id,
             'status' => $status,
@@ -230,7 +233,7 @@ final class DashboardRepository
                         ORDER BY ec.created_at DESC LIMIT 1) as active_case_status
                 FROM ambulances a 
                 ORDER BY FIELD(a.status, "dispatching", "on_scene", "transporting", "standby", "maintenance"), a.code';
-        return $this->db->query($sql)->fetchAll();
+        return $this->db()->query($sql)->fetchAll();
     }
 
     public function casesWithAmbulanceInfo(): array
@@ -243,7 +246,7 @@ final class DashboardRepository
                 FROM emergency_cases ec 
                 LEFT JOIN ambulances a ON ec.assigned_ambulance = a.code
                 ORDER BY ec.created_at DESC LIMIT 12';
-        return $this->db->query($sql)->fetchAll();
+        return $this->db()->query($sql)->fetchAll();
     }
 
     public function findCaseByCaseNo(string $caseNo): ?array
@@ -258,7 +261,7 @@ final class DashboardRepository
                 LEFT JOIN ambulances a ON ec.assigned_ambulance = a.code
                 WHERE ec.case_no = :case_no 
                 LIMIT 1';
-        $stmt = $this->db->prepare($sql);
+        $stmt = $this->db()->prepare($sql);
         $stmt->execute(['case_no' => $caseNo]);
         $case = $stmt->fetch();
         return $case ?: null;
@@ -266,7 +269,7 @@ final class DashboardRepository
 
     public function isAmbulanceAvailable(string $code): array
     {
-        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+        $stmt = $this->db()->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
         $stmt->execute(['code' => $code]);
         $ambulance = $stmt->fetch();
 
@@ -279,7 +282,7 @@ final class DashboardRepository
             return ['available' => false, 'reason' => '车辆状态：' . statusText($ambulance['status']) . '，不可派车'];
         }
 
-        $stmt = $this->db->prepare('SELECT ec.* FROM emergency_cases ec 
+        $stmt = $this->db()->prepare('SELECT ec.* FROM emergency_cases ec 
                                      WHERE ec.assigned_ambulance = :code AND ec.status != "closed" 
                                      ORDER BY ec.created_at DESC LIMIT 1');
         $stmt->execute(['code' => $code]);
@@ -312,7 +315,7 @@ final class DashboardRepository
     private function isAuditTableExists(): bool
     {
         try {
-            $stmt = $this->db->query(
+            $stmt = $this->db()->query(
                 "SELECT COUNT(*) FROM information_schema.tables 
                  WHERE table_schema = DATABASE() 
                  AND table_name = 'ambulance_status_audit'"
@@ -341,7 +344,7 @@ final class DashboardRepository
                 return;
             }
 
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'INSERT INTO ambulance_status_audit 
                  (ambulance_id, ambulance_code, old_status, new_status, 
                   old_location, new_location, changed_by, operator_name, 
@@ -384,7 +387,7 @@ final class DashboardRepository
             $sql = 'SELECT * FROM ambulance_status_audit 
                      ORDER BY created_at DESC 
                      LIMIT :limit';
-            $stmt = $this->db->prepare($sql);
+            $stmt = $this->db()->prepare($sql);
             $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
             $stmt->execute();
             return $stmt->fetchAll();
@@ -405,7 +408,7 @@ final class DashboardRepository
                      WHERE related_case_no = :case_no 
                      ORDER BY created_at DESC 
                      LIMIT :limit';
-            $stmt = $this->db->prepare($sql);
+            $stmt = $this->db()->prepare($sql);
             $stmt->bindValue('case_no', $caseNo);
             $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
             $stmt->execute();
@@ -446,7 +449,7 @@ final class DashboardRepository
     ): array {
         $warnings = [];
 
-        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
+        $stmt = $this->db()->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
         $stmt->execute(['id' => $id]);
         $ambulance = $stmt->fetch();
         if (!$ambulance) {
@@ -461,9 +464,9 @@ final class DashboardRepository
             return ['success' => false, 'errors' => $validationErrors];
         }
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
+            $stmt = $this->db()->prepare('UPDATE ambulances SET status = :status, location = :location, updated_at = NOW() WHERE id = :id');
             $stmt->execute([
                 'id' => $id,
                 'status' => $status,
@@ -486,7 +489,7 @@ final class DashboardRepository
             }
 
             if ($status === 'standby') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                $stmt = $this->db()->prepare('SELECT * FROM emergency_cases 
                                              WHERE assigned_ambulance = :code AND status != "closed" 
                                              ORDER BY created_at DESC LIMIT 1');
                 $stmt->execute(['code' => $ambulance['code']]);
@@ -497,7 +500,7 @@ final class DashboardRepository
             }
 
             if ($status === 'maintenance') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                $stmt = $this->db()->prepare('SELECT * FROM emergency_cases 
                                              WHERE assigned_ambulance = :code AND status != "closed" 
                                              ORDER BY created_at DESC LIMIT 1');
                 $stmt->execute(['code' => $ambulance['code']]);
@@ -507,10 +510,10 @@ final class DashboardRepository
                 }
             }
 
-            $this->db->commit();
+            $this->db()->commit();
             return ['success' => true, 'warnings' => $warnings];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('更新车辆失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['车辆更新失败，请稍后重试']];
         }
@@ -544,9 +547,9 @@ final class DashboardRepository
         $rule = $matrix[$data['status']] ?? null;
         $targetVehicleStatus = $rule ? $rule['ideal'] : 'dispatching';
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'INSERT INTO emergency_cases 
                  (case_no, patient_name, priority, address, status, assigned_ambulance, 
                   dispatch_vehicle_status, dispatched_at, created_at)
@@ -568,11 +571,11 @@ final class DashboardRepository
             ]);
 
             if ($hasAmbulance && $data['status'] !== 'closed') {
-                $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+                $stmt = $this->db()->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
                 $stmt->execute(['code' => $data['assigned_ambulance']]);
                 $ambulance = $stmt->fetch();
 
-                $stmt = $this->db->prepare('UPDATE ambulances SET status = :target_status, updated_at = NOW() WHERE code = :code');
+                $stmt = $this->db()->prepare('UPDATE ambulances SET status = :target_status, updated_at = NOW() WHERE code = :code');
                 $stmt->execute([
                     'code' => $data['assigned_ambulance'],
                     'target_status' => $targetVehicleStatus,
@@ -610,7 +613,7 @@ final class DashboardRepository
                 }
             }
 
-            $this->db->commit();
+            $this->db()->commit();
             return [
                 'success' => true,
                 'case_no' => $caseNo,
@@ -618,7 +621,7 @@ final class DashboardRepository
                 'dispatch_info' => $dispatchInfo,
             ];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('创建事件失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['事件保存失败，请稍后重试']];
         }
@@ -626,7 +629,7 @@ final class DashboardRepository
 
     public function getAmbulanceById(int $id): ?array
     {
-        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
+        $stmt = $this->db()->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
         $stmt->execute(['id' => $id]);
         $ambulance = $stmt->fetch();
         return $ambulance ?: null;
@@ -634,7 +637,7 @@ final class DashboardRepository
 
     public function getAmbulanceByCode(string $code): ?array
     {
-        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+        $stmt = $this->db()->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
         $stmt->execute(['code' => $code]);
         $ambulance = $stmt->fetch();
         return $ambulance ?: null;
@@ -699,9 +702,9 @@ final class DashboardRepository
             return ['success' => false, 'errors' => $errors];
         }
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'INSERT INTO ambulances (code, plate_no, hospital, driver_name, status, location, updated_at)
                  VALUES (:code, :plate_no, :hospital, :driver_name, :status, :location, NOW())'
             );
@@ -714,7 +717,7 @@ final class DashboardRepository
                 'location' => trim($data['location'] ?? ''),
             ]);
 
-            $ambulanceId = (int)$this->db->lastInsertId();
+            $ambulanceId = (int)$this->db()->lastInsertId();
 
             $this->logAmbulanceStatusChange(
                 $ambulanceId,
@@ -729,14 +732,14 @@ final class DashboardRepository
                 'create'
             );
 
-            $this->db->commit();
+            $this->db()->commit();
             return [
                 'success' => true,
                 'id' => $ambulanceId,
                 'code' => trim($data['code']),
             ];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('创建救护车档案失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['救护车档案创建失败，请稍后重试']];
         }
@@ -771,9 +774,9 @@ final class DashboardRepository
             return ['success' => true, 'warnings' => ['未检测到变更']];
         }
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare(
+            $stmt = $this->db()->prepare(
                 'UPDATE ambulances 
                  SET code = :code, 
                      plate_no = :plate_no, 
@@ -811,7 +814,7 @@ final class DashboardRepository
 
             $warnings = [];
             if ($newStatus === 'standby') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                $stmt = $this->db()->prepare('SELECT * FROM emergency_cases 
                                              WHERE assigned_ambulance = :code AND status != "closed" 
                                              ORDER BY created_at DESC LIMIT 1');
                 $stmt->execute(['code' => trim($data['code'])]);
@@ -822,7 +825,7 @@ final class DashboardRepository
             }
 
             if ($newStatus === 'maintenance') {
-                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                $stmt = $this->db()->prepare('SELECT * FROM emergency_cases 
                                              WHERE assigned_ambulance = :code AND status != "closed" 
                                              ORDER BY created_at DESC LIMIT 1');
                 $stmt->execute(['code' => trim($data['code'])]);
@@ -832,13 +835,13 @@ final class DashboardRepository
                 }
             }
 
-            $this->db->commit();
+            $this->db()->commit();
             return [
                 'success' => true,
                 'warnings' => $warnings,
             ];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('更新救护车档案失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['救护车档案更新失败，请稍后重试']];
         }
@@ -851,22 +854,22 @@ final class DashboardRepository
             return ['success' => false, 'errors' => ['车辆不存在']];
         }
 
-        $stmt = $this->db->prepare('SELECT COUNT(*) FROM emergency_cases WHERE assigned_ambulance = :code AND status != "closed"');
+        $stmt = $this->db()->prepare('SELECT COUNT(*) FROM emergency_cases WHERE assigned_ambulance = :code AND status != "closed"');
         $stmt->execute(['code' => $ambulance['code']]);
         $activeCaseCount = (int)$stmt->fetchColumn();
         if ($activeCaseCount > 0) {
             return ['success' => false, 'errors' => ['该车辆有关联进行中的事件，无法删除']];
         }
 
-        $this->db->beginTransaction();
+        $this->db()->beginTransaction();
         try {
-            $stmt = $this->db->prepare('DELETE FROM ambulances WHERE id = :id');
+            $stmt = $this->db()->prepare('DELETE FROM ambulances WHERE id = :id');
             $stmt->execute(['id' => $id]);
 
-            $this->db->commit();
+            $this->db()->commit();
             return ['success' => true, 'code' => $ambulance['code']];
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            $this->db()->rollBack();
             error_log('删除救护车档案失败: ' . $e->getMessage());
             return ['success' => false, 'errors' => ['救护车档案删除失败，请稍后重试']];
         }
@@ -874,6 +877,6 @@ final class DashboardRepository
 
     public function allAmbulancesForProfile(): array
     {
-        return $this->db->query('SELECT * FROM ambulances ORDER BY code')->fetchAll();
+        return $this->db()->query('SELECT * FROM ambulances ORDER BY code')->fetchAll();
     }
 }
