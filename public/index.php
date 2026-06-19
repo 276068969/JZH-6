@@ -34,6 +34,14 @@ try {
         $controller->createCase();
     } elseif ($path === '/admin/ambulances' && $method === 'POST') {
         $controller->updateAmbulance();
+    } elseif ($path === '/admin/ambulances/profile' && $method === 'GET') {
+        $controller->ambulanceProfile();
+    } elseif ($path === '/admin/ambulances/create' && $method === 'POST') {
+        $controller->createAmbulance();
+    } elseif ($path === '/admin/ambulances/update-profile' && $method === 'POST') {
+        $controller->updateAmbulanceProfileAction();
+    } elseif ($path === '/admin/ambulances/delete' && $method === 'POST') {
+        $controller->deleteAmbulance();
     } elseif ($path === '/admin/alerts/handle' && $method === 'POST') {
         $controller->handleAlert();
     } elseif (preg_match('#^/admin/cases/([^/]+)$#', $path, $matches) && $method === 'GET') {

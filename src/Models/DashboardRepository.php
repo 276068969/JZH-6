@@ -620,4 +620,254 @@ final class DashboardRepository
             return ['success' => false, 'errors' => ['保存失败：' . $e->getMessage()]];
         }
     }
+
+    public function getAmbulanceById(int $id): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $ambulance = $stmt->fetch();
+        return $ambulance ?: null;
+    }
+
+    public function getAmbulanceByCode(string $code): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM ambulances WHERE code = :code LIMIT 1');
+        $stmt->execute(['code' => $code]);
+        $ambulance = $stmt->fetch();
+        return $ambulance ?: null;
+    }
+
+    public function validateAmbulanceProfile(array $data, ?int $excludeId = null): array
+    {
+        $errors = [];
+
+        $code = trim($data['code'] ?? '');
+        $plateNo = trim($data['plate_no'] ?? '');
+        $hospital = trim($data['hospital'] ?? '');
+        $driverName = trim($data['driver_name'] ?? '');
+        $status = $data['status'] ?? '';
+        $location = trim($data['location'] ?? '');
+
+        if ($code === '') {
+            $errors[] = '请填写车辆编号';
+        } elseif (strlen($code) > 30) {
+            $errors[] = '车辆编号不能超过 30 个字符';
+        } else {
+            $existing = $this->getAmbulanceByCode($code);
+            if ($existing && (!$excludeId || (int)$existing['id'] !== $excludeId)) {
+                $errors[] = '车辆编号已存在，请更换';
+            }
+        }
+
+        if ($plateNo === '') {
+            $errors[] = '请填写车牌号';
+        } elseif (strlen($plateNo) > 30) {
+            $errors[] = '车牌号不能超过 30 个字符';
+        }
+
+        if ($hospital === '') {
+            $errors[] = '请填写所属医院';
+        } elseif (strlen($hospital) > 120) {
+            $errors[] = '所属医院名称不能超过 120 个字符';
+        }
+
+        if ($driverName === '') {
+            $errors[] = '请填写驾驶员姓名';
+        } elseif (strlen($driverName) > 50) {
+            $errors[] = '驾驶员姓名不能超过 50 个字符';
+        }
+
+        $validStatuses = ['standby', 'dispatching', 'on_scene', 'transporting', 'maintenance'];
+        if (!in_array($status, $validStatuses, true)) {
+            $errors[] = '请选择有效的初始状态';
+        }
+
+        if ($status === 'standby' && $location === '') {
+            $errors[] = '待命车辆必须填写当前位置';
+        }
+
+        return $errors;
+    }
+
+    public function createAmbulance(array $data, int $createdBy, string $operatorName, string $operatorRole): array
+    {
+        $errors = $this->validateAmbulanceProfile($data);
+        if (!empty($errors)) {
+            return ['success' => false, 'errors' => $errors];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare(
+                'INSERT INTO ambulances (code, plate_no, hospital, driver_name, status, location, updated_at)
+                 VALUES (:code, :plate_no, :hospital, :driver_name, :status, :location, NOW())'
+            );
+            $stmt->execute([
+                'code' => trim($data['code']),
+                'plate_no' => trim($data['plate_no']),
+                'hospital' => trim($data['hospital']),
+                'driver_name' => trim($data['driver_name']),
+                'status' => $data['status'],
+                'location' => trim($data['location'] ?? ''),
+            ]);
+
+            $ambulanceId = (int)$this->db->lastInsertId();
+
+            $this->logAmbulanceStatusChange(
+                $ambulanceId,
+                trim($data['code']),
+                '',
+                $data['status'],
+                null,
+                trim($data['location'] ?? ''),
+                $createdBy,
+                $operatorName,
+                $operatorRole,
+                'create'
+            );
+
+            $this->db->commit();
+            return [
+                'success' => true,
+                'id' => $ambulanceId,
+                'code' => trim($data['code']),
+            ];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['创建失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function updateAmbulanceProfile(int $id, array $data, int $updatedBy, string $operatorName, string $operatorRole): array
+    {
+        $ambulance = $this->getAmbulanceById($id);
+        if (!$ambulance) {
+            return ['success' => false, 'errors' => ['车辆不存在']];
+        }
+
+        $errors = $this->validateAmbulanceProfile($data, $id);
+        if (!empty($errors)) {
+            return ['success' => false, 'errors' => $errors];
+        }
+
+        $oldStatus = $ambulance['status'];
+        $oldLocation = $ambulance['location'];
+        $newStatus = $data['status'];
+        $newLocation = trim($data['location'] ?? '');
+
+        $statusChanged = $oldStatus !== $newStatus;
+        $locationChanged = $oldLocation !== $newLocation;
+
+        if (!$statusChanged && !$locationChanged
+            && $ambulance['code'] === trim($data['code'])
+            && $ambulance['plate_no'] === trim($data['plate_no'])
+            && $ambulance['hospital'] === trim($data['hospital'])
+            && $ambulance['driver_name'] === trim($data['driver_name'])
+        ) {
+            return ['success' => true, 'warnings' => ['未检测到变更']];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare(
+                'UPDATE ambulances 
+                 SET code = :code, 
+                     plate_no = :plate_no, 
+                     hospital = :hospital, 
+                     driver_name = :driver_name,
+                     status = :status, 
+                     location = :location,
+                     updated_at = NOW()
+                 WHERE id = :id'
+            );
+            $stmt->execute([
+                'id' => $id,
+                'code' => trim($data['code']),
+                'plate_no' => trim($data['plate_no']),
+                'hospital' => trim($data['hospital']),
+                'driver_name' => trim($data['driver_name']),
+                'status' => $newStatus,
+                'location' => $newLocation,
+            ]);
+
+            if ($statusChanged || $locationChanged) {
+                $this->logAmbulanceStatusChange(
+                    $id,
+                    trim($data['code']),
+                    $oldStatus,
+                    $newStatus,
+                    $oldLocation,
+                    $newLocation,
+                    $updatedBy,
+                    $operatorName,
+                    $operatorRole,
+                    'profile'
+                );
+            }
+
+            $warnings = [];
+            if ($newStatus === 'standby') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => trim($data['code'])]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '提示：车辆设为待命，但事件 ' . $activeCase['case_no'] . ' 尚未关闭，请确认是否需要结案。';
+                }
+            }
+
+            if ($newStatus === 'maintenance') {
+                $stmt = $this->db->prepare('SELECT * FROM emergency_cases 
+                                             WHERE assigned_ambulance = :code AND status != "closed" 
+                                             ORDER BY created_at DESC LIMIT 1');
+                $stmt->execute(['code' => trim($data['code'])]);
+                $activeCase = $stmt->fetch();
+                if ($activeCase) {
+                    $warnings[] = '警告：车辆设为检修，但仍有关联进行中事件 ' . $activeCase['case_no'] . '，请重新调度。';
+                }
+            }
+
+            $this->db->commit();
+            return [
+                'success' => true,
+                'warnings' => $warnings,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['更新失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function deleteAmbulance(int $id, int $deletedBy, string $operatorName, string $operatorRole): array
+    {
+        $ambulance = $this->getAmbulanceById($id);
+        if (!$ambulance) {
+            return ['success' => false, 'errors' => ['车辆不存在']];
+        }
+
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM emergency_cases WHERE assigned_ambulance = :code AND status != "closed"');
+        $stmt->execute(['code' => $ambulance['code']]);
+        $activeCaseCount = (int)$stmt->fetchColumn();
+        if ($activeCaseCount > 0) {
+            return ['success' => false, 'errors' => ['该车辆有关联进行中的事件，无法删除']];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare('DELETE FROM ambulances WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+
+            $this->db->commit();
+            return ['success' => true, 'code' => $ambulance['code']];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'errors' => ['删除失败：' . $e->getMessage()]];
+        }
+    }
+
+    public function allAmbulancesForProfile(): array
+    {
+        return $this->db->query('SELECT * FROM ambulances ORDER BY code')->fetchAll();
+    }
 }

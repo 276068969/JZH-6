@@ -1,4 +1,7 @@
-<?php ob_start(); ?>
+<?php
+$activeTab = $active_tab ?? 'dashboard';
+ob_start();
+?>
 <section class="admin-head">
     <div>
         <p class="eyebrow">后台管理</p>
@@ -6,6 +9,11 @@
     </div>
     <div class="operator">当前用户：<?= h($user['name']) ?>（<?= h($user['role']) ?>）</div>
 </section>
+
+<nav class="admin-tabs">
+    <a href="/admin" class="tab-link <?= $activeTab === 'dashboard' ? 'active' : '' ?>">调度监管工作台</a>
+    <a href="/admin/ambulances/profile" class="tab-link <?= $activeTab === 'profile' ? 'active' : '' ?>">救护车档案管理</a>
+</nav>
 
 <?php if (!empty($flash)): ?>
 <section class="flash-messages">
@@ -22,6 +30,9 @@
     <?php endforeach; ?>
 </section>
 <?php endif; ?>
+
+<div class="tab-content">
+    <div class="tab-pane <?= $activeTab === 'dashboard' ? 'active' : '' ?>" id="tab-dashboard">
 
 <section class="metrics compact">
     <div><span>接入车辆</span><strong><?= (int) $overview['ambulances_total'] ?></strong></div>
@@ -779,6 +790,322 @@
     }
 })();
 </script>
+
+    </div>
+
+    <div class="tab-pane <?= $activeTab === 'profile' ? 'active' : '' ?>" id="tab-profile">
+
+<section class="metrics compact">
+    <div><span>档案总数</span><strong><?= count($ambulance_profiles ?? []) ?></strong></div>
+    <div><span>待命车辆</span><strong><?= count(array_filter($ambulance_profiles ?? [], fn($a) => $a['status'] === 'standby')) ?></strong></div>
+    <div><span>勤务中</span><strong><?= count(array_filter($ambulance_profiles ?? [], fn($a) => in_array($a['status'], ['dispatching', 'on_scene', 'transporting'], true))) ?></strong></div>
+    <div><span>检修中</span><strong><?= count(array_filter($ambulance_profiles ?? [], fn($a) => $a['status'] === 'maintenance')) ?></strong></div>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>新增救护车档案</h2>
+            <span>车辆接入 · 基础信息录入</span>
+        </div>
+        <form class="stack-form" method="post" action="/admin/ambulances/create" id="ambulance-create-form">
+            <label><span>车辆编号</span><input name="code" required placeholder="如：AMB-021"></label>
+            <label><span>车牌号</span><input name="plate_no" required placeholder="如：沪A·12021"></label>
+            <label><span>所属医院</span><input name="hospital" required placeholder="如：第一人民医院"></label>
+            <label><span>驾驶员</span><input name="driver_name" required placeholder="如：李师傅"></label>
+            <div class="form-row">
+                <label>
+                    <span>初始状态</span>
+                    <select name="status" id="profile-status">
+                        <option value="standby">待命</option>
+                        <option value="dispatching">出车</option>
+                        <option value="on_scene">现场处置</option>
+                        <option value="transporting">转运中</option>
+                        <option value="maintenance">检修</option>
+                    </select>
+                </label>
+            </div>
+            <label><span>当前位置</span><input name="location" id="profile-location" placeholder="待命车辆需填写位置"></label>
+            <div class="dispatch-hint" id="profile-hint">填写车辆基础档案信息，用于车辆接入监管流程</div>
+            <button type="submit">创建档案</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h2>档案列表</h2>
+            <span>基础信息管理 · 全部车辆</span>
+        </div>
+        <div class="vehicle-filter-bar">
+            <div class="filter-item">
+                <label>状态</label>
+                <select id="profile-filter-status">
+                    <option value="">全部状态</option>
+                    <option value="standby">待命</option>
+                    <option value="dispatching">出车</option>
+                    <option value="on_scene">现场处置</option>
+                    <option value="transporting">转运中</option>
+                    <option value="maintenance">检修</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>医院</label>
+                <select id="profile-filter-hospital">
+                    <option value="">全部医院</option>
+                    <?php
+                        $profileHospitals = [];
+                        foreach ($ambulance_profiles ?? [] as $amb) {
+                            if (!empty($amb['hospital']) && !in_array($amb['hospital'], $profileHospitals, true)) {
+                                $profileHospitals[] = $amb['hospital'];
+                            }
+                        }
+                        sort($profileHospitals);
+                    ?>
+                    <?php foreach ($profileHospitals as $h): ?>
+                        <option value="<?= h($h) ?>"><?= h($h) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="filter-item filter-code">
+                <label>编号/车牌</label>
+                <input type="text" id="profile-filter-keyword" placeholder="输入编号或车牌号">
+            </div>
+            <div class="filter-item filter-actions">
+                <button type="button" id="profile-filter-reset" class="btn-reset">重置</button>
+            </div>
+            <div class="filter-result-info">
+                <span id="profile-filter-result-count">共 <?= count($ambulance_profiles ?? []) ?> 辆</span>
+            </div>
+        </div>
+        <table class="vehicle-table profile-table">
+            <thead>
+                <tr>
+                    <th>车辆编号</th>
+                    <th>车牌号</th>
+                    <th>所属医院</th>
+                    <th>驾驶员</th>
+                    <th>状态</th>
+                    <th>位置</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="profile-tbody">
+            <?php foreach ($ambulance_profiles ?? [] as $amb): ?>
+                <tr data-status="<?= h($amb['status']) ?>"
+                    data-hospital="<?= h($amb['hospital']) ?>"
+                    data-code="<?= h($amb['code']) ?>"
+                    data-plate="<?= h($amb['plate_no']) ?>"
+                    data-id="<?= (int)$amb['id'] ?>">
+                    <td><strong><?= h($amb['code']) ?></strong></td>
+                    <td><?= h($amb['plate_no']) ?></td>
+                    <td><?= h($amb['hospital']) ?></td>
+                    <td><?= h($amb['driver_name']) ?></td>
+                    <td>
+                        <span class="status-tag <?= statusClass($amb['status']) ?>">
+                            <?= statusText($amb['status']) ?>
+                        </span>
+                    </td>
+                    <td class="muted"><?= h($amb['location'] ?? '—') ?></td>
+                    <td>
+                        <div class="row-actions">
+                            <button type="button" class="btn-edit" data-id="<?= (int)$amb['id'] ?>">编辑</button>
+                            <form method="post" action="/admin/ambulances/delete" class="inline-form" 
+                                  onsubmit="return confirm('确定要删除救护车 <?= h($amb['code']) ?> 的档案吗？');">
+                                <input type="hidden" name="id" value="<?= (int)$amb['id'] ?>">
+                                <button type="submit" class="btn-delete">删除</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <div id="profile-empty-result" class="empty-filter-result" style="display:none;">
+            <span class="empty-icon">🔍</span>
+            <p>没有匹配的车辆档案</p>
+        </div>
+    </div>
+</section>
+
+<div class="modal" id="edit-modal" style="display:none;">
+    <div class="modal-overlay" data-close="modal"></div>
+    <div class="modal-dialog">
+        <div class="modal-head">
+            <h3>编辑救护车档案</h3>
+            <button type="button" class="modal-close" data-close="modal">×</button>
+        </div>
+        <form class="stack-form" method="post" action="/admin/ambulances/update-profile" id="edit-form">
+            <input type="hidden" name="id" id="edit-id">
+            <label><span>车辆编号</span><input name="code" id="edit-code" required></label>
+            <label><span>车牌号</span><input name="plate_no" id="edit-plate" required></label>
+            <label><span>所属医院</span><input name="hospital" id="edit-hospital" required></label>
+            <label><span>驾驶员</span><input name="driver_name" id="edit-driver" required></label>
+            <div class="form-row">
+                <label>
+                    <span>状态</span>
+                    <select name="status" id="edit-status">
+                        <option value="standby">待命</option>
+                        <option value="dispatching">出车</option>
+                        <option value="on_scene">现场处置</option>
+                        <option value="transporting">转运中</option>
+                        <option value="maintenance">检修</option>
+                    </select>
+                </label>
+            </div>
+            <label><span>当前位置</span><input name="location" id="edit-location"></label>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" data-close="modal">取消</button>
+                <button type="submit" class="btn-submit">保存修改</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    var profileStatus = document.getElementById('profile-status');
+    var profileLocation = document.getElementById('profile-location');
+    var profileHint = document.getElementById('profile-hint');
+
+    function updateProfileHint() {
+        if (!profileStatus || !profileHint) return;
+        var status = profileStatus.value;
+        if (status === 'standby') {
+            profileHint.className = 'dispatch-hint warning';
+            profileHint.textContent = '待命车辆必须填写当前位置，用于派车调度参考';
+            if (profileLocation) profileLocation.required = true;
+        } else if (status === 'maintenance') {
+            profileHint.className = 'dispatch-hint';
+            profileHint.textContent = '检修车辆暂不可参与派车调度';
+            if (profileLocation) profileLocation.required = false;
+        } else {
+            profileHint.className = 'dispatch-hint';
+            profileHint.textContent = '勤务中车辆将自动参与调度匹配';
+            if (profileLocation) profileLocation.required = false;
+        }
+    }
+    if (profileStatus) profileStatus.addEventListener('change', updateProfileHint);
+    updateProfileHint();
+
+    var filterStatus = document.getElementById('profile-filter-status');
+    var filterHospital = document.getElementById('profile-filter-hospital');
+    var filterKeyword = document.getElementById('profile-filter-keyword');
+    var filterReset = document.getElementById('profile-filter-reset');
+    var tbody = document.getElementById('profile-tbody');
+    var resultCount = document.getElementById('profile-filter-result-count');
+    var emptyResult = document.getElementById('profile-empty-result');
+    var totalCount = tbody ? tbody.querySelectorAll('tr').length : 0;
+
+    function applyProfileFilters() {
+        if (!tbody) return;
+        var rows = tbody.querySelectorAll('tr');
+        var statusVal = (filterStatus ? filterStatus.value : '').trim();
+        var hospitalVal = (filterHospital ? filterHospital.value : '').trim();
+        var keywordVal = (filterKeyword ? filterKeyword.value : '').trim().toLowerCase();
+        var visible = 0;
+
+        rows.forEach(function(row) {
+            var matchStatus = !statusVal || row.getAttribute('data-status') === statusVal;
+            var matchHospital = !hospitalVal || row.getAttribute('data-hospital') === hospitalVal;
+            var code = (row.getAttribute('data-code') || '').toLowerCase();
+            var plate = (row.getAttribute('data-plate') || '').toLowerCase();
+            var matchKeyword = !keywordVal || code.indexOf(keywordVal) !== -1 || plate.indexOf(keywordVal) !== -1;
+
+            if (matchStatus && matchHospital && matchKeyword) {
+                row.style.display = '';
+                visible++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (resultCount) {
+            resultCount.textContent = '显示 ' + visible + ' / 共 ' + totalCount + ' 辆';
+        }
+        if (emptyResult) {
+            emptyResult.style.display = visible === 0 ? '' : 'none';
+        }
+    }
+
+    function resetProfileFilters() {
+        if (filterStatus) filterStatus.value = '';
+        if (filterHospital) filterHospital.value = '';
+        if (filterKeyword) filterKeyword.value = '';
+        applyProfileFilters();
+    }
+
+    if (filterStatus) filterStatus.addEventListener('change', applyProfileFilters);
+    if (filterHospital) filterHospital.addEventListener('change', applyProfileFilters);
+    if (filterKeyword) {
+        var timer;
+        filterKeyword.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(applyProfileFilters, 150);
+        });
+    }
+    if (filterReset) filterReset.addEventListener('click', resetProfileFilters);
+
+    var editModal = document.getElementById('edit-modal');
+    var editForm = document.getElementById('edit-form');
+    var editId = document.getElementById('edit-id');
+    var editCode = document.getElementById('edit-code');
+    var editPlate = document.getElementById('edit-plate');
+    var editHospital = document.getElementById('edit-hospital');
+    var editDriver = document.getElementById('edit-driver');
+    var editStatus = document.getElementById('edit-status');
+    var editLocation = document.getElementById('edit-location');
+
+    var profilesData = {};
+    <?php foreach ($ambulance_profiles ?? [] as $amb): ?>
+    profilesData[<?= (int)$amb['id'] ?>] = {
+        id: <?= (int)$amb['id'] ?>,
+        code: '<?= addslashes($amb['code']) ?>',
+        plate_no: '<?= addslashes($amb['plate_no']) ?>',
+        hospital: '<?= addslashes($amb['hospital']) ?>',
+        driver_name: '<?= addslashes($amb['driver_name']) ?>',
+        status: '<?= addslashes($amb['status']) ?>',
+        location: '<?= addslashes($amb['location'] ?? '') ?>'
+    };
+    <?php endforeach; ?>
+
+    function openEditModal(id) {
+        var data = profilesData[id];
+        if (!data || !editModal) return;
+        editId.value = data.id;
+        editCode.value = data.code;
+        editPlate.value = data.plate_no;
+        editHospital.value = data.hospital;
+        editDriver.value = data.driver_name;
+        editStatus.value = data.status;
+        editLocation.value = data.location || '';
+        editModal.style.display = '';
+    }
+
+    function closeEditModal() {
+        if (editModal) editModal.style.display = 'none';
+    }
+
+    var editButtons = document.querySelectorAll('.btn-edit');
+    editButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = parseInt(btn.getAttribute('data-id'), 10);
+            openEditModal(id);
+        });
+    });
+
+    document.querySelectorAll('[data-close="modal"]').forEach(function(el) {
+        el.addEventListener('click', closeEditModal);
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeEditModal();
+    });
+})();
+</script>
+
+    </div>
+</div>
+
 <?php
 $content = ob_get_clean();
 $title = '后台管理 - 救护车监管平台';

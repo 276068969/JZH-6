@@ -312,6 +312,120 @@ final class AppController
         ]);
     }
 
+    public function ambulanceProfile(): void
+    {
+        Auth::requireAdmin();
+
+        $statusAuditLogs = [];
+        $auditTableAvailable = false;
+        try {
+            $auditTableAvailable = $this->repo->isAuditTableAvailable();
+            $statusAuditLogs = $this->repo->recentStatusAuditLogs(20);
+        } catch (\Throwable $e) {
+            error_log('加载审计日志失败: ' . $e->getMessage());
+        }
+
+        View::render('admin', [
+            'overview' => $this->repo->overview(),
+            'ambulances' => $this->repo->ambulancesWithDispatchInfo(),
+            'ambulance_profiles' => $this->repo->allAmbulancesForProfile(),
+            'cases' => $this->repo->casesWithAmbulanceInfo(),
+            'alerts' => $this->repo->alerts(),
+            'open_alerts' => $this->repo->openAlerts(),
+            'resolved_alerts' => $this->repo->resolvedAlerts(),
+            'status_audit_logs' => $statusAuditLogs,
+            'audit_table_available' => $auditTableAvailable,
+            'user' => Auth::user(),
+            'flash' => $this->getFlash(),
+            'last_created_case' => null,
+            'active_tab' => 'profile',
+        ]);
+    }
+
+    public function createAmbulance(): void
+    {
+        Auth::requireAdmin();
+        $user = Auth::user();
+
+        $result = $this->repo->createAmbulance(
+            [
+                'code' => trim($_POST['code'] ?? ''),
+                'plate_no' => trim($_POST['plate_no'] ?? ''),
+                'hospital' => trim($_POST['hospital'] ?? ''),
+                'driver_name' => trim($_POST['driver_name'] ?? ''),
+                'status' => $_POST['status'] ?? 'standby',
+                'location' => trim($_POST['location'] ?? ''),
+            ],
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
+        );
+
+        if (!$result['success']) {
+            $this->setFlash('errors', $result['errors']);
+        } else {
+            $this->setFlash('success', ['救护车档案 ' . $result['code'] . ' 创建成功']);
+        }
+
+        header('Location: /admin/ambulances/profile');
+    }
+
+    public function updateAmbulanceProfileAction(): void
+    {
+        Auth::requireAdmin();
+        $user = Auth::user();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $result = $this->repo->updateAmbulanceProfile(
+            $id,
+            [
+                'code' => trim($_POST['code'] ?? ''),
+                'plate_no' => trim($_POST['plate_no'] ?? ''),
+                'hospital' => trim($_POST['hospital'] ?? ''),
+                'driver_name' => trim($_POST['driver_name'] ?? ''),
+                'status' => $_POST['status'] ?? 'standby',
+                'location' => trim($_POST['location'] ?? ''),
+            ],
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
+        );
+
+        if (!$result['success']) {
+            $this->setFlash('errors', $result['errors']);
+        } else {
+            $messages = ['救护车档案更新成功'];
+            if (!empty($result['warnings'])) {
+                $this->setFlash('warnings', $result['warnings']);
+            }
+            $this->setFlash('success', $messages);
+        }
+
+        header('Location: /admin/ambulances/profile');
+    }
+
+    public function deleteAmbulance(): void
+    {
+        Auth::requireAdmin();
+        $user = Auth::user();
+
+        $id = (int)($_POST['id'] ?? 0);
+        $result = $this->repo->deleteAmbulance(
+            $id,
+            (int)$user['id'],
+            $user['name'],
+            $user['role']
+        );
+
+        if (!$result['success']) {
+            $this->setFlash('errors', $result['errors']);
+        } else {
+            $this->setFlash('success', ['救护车 ' . $result['code'] . ' 已删除']);
+        }
+
+        header('Location: /admin/ambulances/profile');
+    }
+
     private function setFlash(string $type, array $messages): void
     {
         $_SESSION['_flash'][$type] = $messages;
