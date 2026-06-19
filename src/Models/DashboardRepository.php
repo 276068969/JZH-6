@@ -193,9 +193,12 @@ final class DashboardRepository
         $this->db()->beginTransaction();
         try {
             $caseNo = $this->generateCaseNo();
+            $nowTs = date('Y-m-d H:i:s');
+            $acceptedAt = in_array($data['status'], ['accepted', 'closed'], true) ? $nowTs : null;
+            $closedAt = ($data['status'] === 'closed') ? $nowTs : null;
             $stmt = $this->db()->prepare(
-                'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at)
-                 VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW())'
+                'INSERT INTO emergency_cases (case_no, patient_name, priority, address, status, assigned_ambulance, created_at, accepted_at, closed_at)
+                 VALUES (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance, NOW(), :accepted_at, :closed_at)'
             );
             $stmt->execute([
                 'case_no' => $caseNo,
@@ -204,6 +207,8 @@ final class DashboardRepository
                 'address' => $data['address'],
                 'status' => $data['status'],
                 'assigned_ambulance' => $data['assigned_ambulance'] ?: null,
+                'accepted_at' => $acceptedAt,
+                'closed_at' => $closedAt,
             ]);
             $this->db()->commit();
         } catch (\Throwable $e) {
@@ -549,16 +554,19 @@ final class DashboardRepository
 
         $this->db()->beginTransaction();
         try {
+            $caseNo = $this->generateCaseNo();
+            $hasAmbulance = !empty($data['assigned_ambulance']);
+            $nowTs = date('Y-m-d H:i:s');
+            $acceptedAt = in_array($data['status'], ['accepted', 'closed'], true) ? $nowTs : null;
+            $closedAt = ($data['status'] === 'closed') ? $nowTs : null;
             $stmt = $this->db()->prepare(
                 'INSERT INTO emergency_cases 
                  (case_no, patient_name, priority, address, status, assigned_ambulance, 
-                  dispatch_vehicle_status, dispatched_at, created_at)
+                  dispatch_vehicle_status, dispatched_at, created_at, accepted_at, closed_at)
                  VALUES 
                  (:case_no, :patient_name, :priority, :address, :status, :assigned_ambulance,
-                  :dispatch_vehicle_status, :dispatched_at, NOW())'
+                  :dispatch_vehicle_status, :dispatched_at, NOW(), :accepted_at, :closed_at)'
             );
-            $caseNo = $this->generateCaseNo();
-            $hasAmbulance = !empty($data['assigned_ambulance']);
             $stmt->execute([
                 'case_no' => $caseNo,
                 'patient_name' => $data['patient_name'],
@@ -567,7 +575,9 @@ final class DashboardRepository
                 'status' => $data['status'],
                 'assigned_ambulance' => $hasAmbulance ? $data['assigned_ambulance'] : null,
                 'dispatch_vehicle_status' => $hasAmbulance ? $dispatchSnapshot : null,
-                'dispatched_at' => $hasAmbulance ? date('Y-m-d H:i:s') : null,
+                'dispatched_at' => $hasAmbulance ? $nowTs : null,
+                'accepted_at' => $acceptedAt,
+                'closed_at' => $closedAt,
             ]);
 
             if ($hasAmbulance && $data['status'] !== 'closed') {

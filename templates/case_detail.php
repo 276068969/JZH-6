@@ -147,13 +147,25 @@
             <span class="ts-label">派车时间</span>
             <span class="ts-value <?= empty($case['dispatched_at']) ? 'empty' : '' ?>"><?= !empty($case['dispatched_at']) ? h($case['dispatched_at']) : '未派车' ?></span>
         </div>
+        <?php
+            $acceptedTs = $case['accepted_at'] ?? '';
+            $acceptedDisplay = !empty($acceptedTs)
+                ? h($acceptedTs)
+                : (in_array($case['status'], ['accepted', 'closed'], true) ? '时间未记录' : '待受理');
+            $acceptedClass = empty($acceptedTs) ? 'empty' : '';
+            $closedTs = $case['closed_at'] ?? '';
+            $closedDisplay = !empty($closedTs)
+                ? h($closedTs)
+                : ($case['status'] === 'closed' ? '时间未记录' : '处理中');
+            $closedClass = empty($closedTs) ? 'empty' : '';
+        ?>
         <div class="ts-item">
             <span class="ts-label">受理时间</span>
-            <span class="ts-value <?= empty($case['accepted_at']) ? 'empty' : '' ?>"><?= !empty($case['accepted_at']) ? h($case['accepted_at']) : '待受理' ?></span>
+            <span class="ts-value <?= $acceptedClass ?>"><?= $acceptedDisplay ?></span>
         </div>
         <div class="ts-item">
             <span class="ts-label">结案时间</span>
-            <span class="ts-value <?= empty($case['closed_at']) ? 'empty' : '' ?>"><?= !empty($case['closed_at']) ? h($case['closed_at']) : '处理中' ?></span>
+            <span class="ts-value <?= $closedClass ?>"><?= $closedDisplay ?></span>
         </div>
     </div>
 
