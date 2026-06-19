@@ -181,10 +181,20 @@
     </div>
     <div class="alerts front-alerts" id="front-alerts">
         <?php foreach ($alerts as $alert): ?>
-            <?php $isOpen = $alert['status'] === 'open'; ?>
-            <article class="front-alert <?= $isOpen ? 'alert-status-open' : 'alert-status-resolved' ?>" data-alert-id="<?= (int) $alert['id'] ?>">
+            <?php
+                $isOpen = $alert['status'] === 'open';
+                $typeInfo = alertTypeInfo($alert['title'], $alert['description'] ?? '');
+            ?>
+            <article class="front-alert <?= $isOpen ? 'alert-status-open' : 'alert-status-resolved' ?> <?= h($typeInfo['class']) ?>" data-alert-id="<?= (int) $alert['id'] ?>">
+                <span class="front-alert-type-icon"><?= h($typeInfo['icon']) ?></span>
                 <div class="front-alert-head">
-                    <b class="front-alert-title"><?= h($alert['title']) ?></b>
+                    <div class="front-alert-title-row">
+                        <span class="alert-type-badge">
+                            <span class="alert-type-icon"><?= h($typeInfo['icon']) ?></span>
+                            <?= h($typeInfo['label']) ?>
+                        </span>
+                        <b class="front-alert-title"><?= h($alert['title']) ?></b>
+                    </div>
                     <span class="status-tag <?= statusClass($alert['status']) ?>"><?= statusText($alert['status']) ?></span>
                 </div>
                 <p class="front-alert-desc"><?= h($alert['description']) ?></p>
@@ -224,6 +234,31 @@
         'open': 'status-open',
         'resolved': 'status-resolved'
     };
+    var alertTypeConfig = {
+        'device_offline': { label: '设备离线', icon: '📡', class: 'alert-type-device-offline' },
+        'response_timeout': { label: '响应超时', icon: '⏱', class: 'alert-type-response-timeout' },
+        'status_mismatch': { label: '状态异常', icon: '⚠', class: 'alert-type-status-mismatch' },
+        'pending_dispatch': { label: '待派车', icon: '🚑', class: 'alert-type-pending-dispatch' },
+        'trajectory_deviation': { label: '轨迹偏离', icon: '🧭', class: 'alert-type-trajectory' },
+        'maintenance': { label: '检修提醒', icon: '🔧', class: 'alert-type-maintenance' },
+        'driver_fatigue': { label: '疲劳预警', icon: '😴', class: 'alert-type-fatigue' },
+        'supply_shortage': { label: '耗材不足', icon: '📦', class: 'alert-type-supply' },
+        'approval_pending': { label: '待审批', icon: '📋', class: 'alert-type-approval' },
+        'default': { label: '风险告警', icon: '🔔', class: 'alert-type-default' }
+    };
+    function classifyAlert(title, description) {
+        var text = (title || '') + ' ' + (description || '');
+        if (/设备离线|GPS.*中断|定位数据中断|设备通信异常|数据.*未上报/.test(text)) return 'device_offline';
+        if (/响应时间超阈值|响应超时|转运超时|超时预警/.test(text)) return 'response_timeout';
+        if (/状态严重不一致|状态有偏差|状态不一致/.test(text)) return 'status_mismatch';
+        if (/未派车|派车遗漏|事件积压/.test(text)) return 'pending_dispatch';
+        if (/轨迹偏离/.test(text)) return 'trajectory_deviation';
+        if (/检修超期|检修.*超|车辆未按规定|未按规定回库/.test(text)) return 'maintenance';
+        if (/疲劳|连续执勤/.test(text)) return 'driver_fatigue';
+        if (/耗材不足|库存不足/.test(text)) return 'supply_shortage';
+        if (/审批待办|待审批/.test(text)) return 'approval_pending';
+        return 'default';
+    }
     var caseStatusClassMap = {
         'reported': 'status-reported',
         'accepted': 'status-accepted',
@@ -272,22 +307,43 @@
         alertsContainer.innerHTML = '';
         alerts.forEach(function(alert) {
             var isOpen = alert.status === 'open';
+            var typeKey = classifyAlert(alert.title, alert.description || '');
+            var typeInfo = alertTypeConfig[typeKey] || alertTypeConfig['default'];
+
             var article = document.createElement('article');
-            article.className = 'front-alert ' + (isOpen ? 'alert-status-open' : 'alert-status-resolved');
+            article.className = 'front-alert ' + (isOpen ? 'alert-status-open' : 'alert-status-resolved') + ' ' + typeInfo.class;
             article.setAttribute('data-alert-id', alert.id);
+
+            var typeIconBg = document.createElement('span');
+            typeIconBg.className = 'front-alert-type-icon';
+            typeIconBg.textContent = typeInfo.icon;
+            article.appendChild(typeIconBg);
 
             var head = document.createElement('div');
             head.className = 'front-alert-head';
 
+            var titleRow = document.createElement('div');
+            titleRow.className = 'front-alert-title-row';
+
+            var typeBadge = document.createElement('span');
+            typeBadge.className = 'alert-type-badge';
+            var typeBadgeIcon = document.createElement('span');
+            typeBadgeIcon.className = 'alert-type-icon';
+            typeBadgeIcon.textContent = typeInfo.icon;
+            typeBadge.appendChild(typeBadgeIcon);
+            typeBadge.appendChild(document.createTextNode(typeInfo.label));
+            titleRow.appendChild(typeBadge);
+
             var title = document.createElement('b');
             title.className = 'front-alert-title';
             title.textContent = alert.title;
+            titleRow.appendChild(title);
 
             var status = document.createElement('span');
             status.className = 'status-tag ' + (statusClassMap[alert.status] || '');
             status.textContent = statusTextMap[alert.status] || alert.status;
 
-            head.appendChild(title);
+            head.appendChild(titleRow);
             head.appendChild(status);
 
             var desc = document.createElement('p');

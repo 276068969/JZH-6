@@ -361,10 +361,14 @@
             <?php else: ?>
                 <div class="alerts-open-list">
                     <?php foreach ($open_alerts as $alert): ?>
-                        <article class="alert-card alert-open">
+                        <?php $typeInfo = alertTypeInfo($alert['title'], $alert['description'] ?? ''); ?>
+                        <article class="alert-card alert-open <?= h($typeInfo['class']) ?>">
                             <div class="alert-card-head">
                                 <div class="alert-title-row">
-                                    <span class="alert-priority-dot"></span>
+                                    <span class="alert-type-badge">
+                                        <span class="alert-type-icon"><?= h($typeInfo['icon']) ?></span>
+                                        <?= h($typeInfo['label']) ?>
+                                    </span>
                                     <h4><?= h($alert['title']) ?></h4>
                                     <span class="status-tag status-open">未处理</span>
                                 </div>
@@ -402,9 +406,14 @@
             <?php else: ?>
                 <div class="alerts-resolved-list">
                     <?php foreach ($resolved_alerts as $alert): ?>
-                        <article class="alert-card alert-resolved">
+                        <?php $typeInfo = alertTypeInfo($alert['title'], $alert['description'] ?? ''); ?>
+                        <article class="alert-card alert-resolved <?= h($typeInfo['class']) ?>">
                             <div class="alert-card-head">
                                 <div class="alert-title-row">
+                                    <span class="alert-type-badge">
+                                        <span class="alert-type-icon"><?= h($typeInfo['icon']) ?></span>
+                                        <?= h($typeInfo['label']) ?>
+                                    </span>
                                     <h4><?= h($alert['title']) ?></h4>
                                     <span class="status-tag status-resolved">已处理</span>
                                 </div>

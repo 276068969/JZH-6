@@ -175,3 +175,117 @@ if (!function_exists('matchLevelText')) {
         ][$level] ?? '';
     }
 }
+
+if (!function_exists('alertTypeConfig')) {
+    function alertTypeConfig(): array
+    {
+        return [
+            'device_offline' => [
+                'label' => '设备离线',
+                'icon' => '📡',
+                'class' => 'alert-type-device-offline',
+                'priority' => 1,
+            ],
+            'response_timeout' => [
+                'label' => '响应超时',
+                'icon' => '⏱',
+                'class' => 'alert-type-response-timeout',
+                'priority' => 2,
+            ],
+            'status_mismatch' => [
+                'label' => '状态异常',
+                'icon' => '⚠',
+                'class' => 'alert-type-status-mismatch',
+                'priority' => 3,
+            ],
+            'pending_dispatch' => [
+                'label' => '待派车',
+                'icon' => '🚑',
+                'class' => 'alert-type-pending-dispatch',
+                'priority' => 4,
+            ],
+            'trajectory_deviation' => [
+                'label' => '轨迹偏离',
+                'icon' => '🧭',
+                'class' => 'alert-type-trajectory',
+                'priority' => 5,
+            ],
+            'maintenance' => [
+                'label' => '检修提醒',
+                'icon' => '🔧',
+                'class' => 'alert-type-maintenance',
+                'priority' => 6,
+            ],
+            'driver_fatigue' => [
+                'label' => '疲劳预警',
+                'icon' => '😴',
+                'class' => 'alert-type-fatigue',
+                'priority' => 7,
+            ],
+            'supply_shortage' => [
+                'label' => '耗材不足',
+                'icon' => '📦',
+                'class' => 'alert-type-supply',
+                'priority' => 8,
+            ],
+            'approval_pending' => [
+                'label' => '待审批',
+                'icon' => '📋',
+                'class' => 'alert-type-approval',
+                'priority' => 9,
+            ],
+            'default' => [
+                'label' => '风险告警',
+                'icon' => '🔔',
+                'class' => 'alert-type-default',
+                'priority' => 99,
+            ],
+        ];
+    }
+}
+
+if (!function_exists('classifyAlert')) {
+    function classifyAlert(string $title, string $description = ''): string
+    {
+        $text = $title . ' ' . $description;
+
+        if (preg_match('/设备离线|GPS.*中断|定位数据中断|设备通信异常|数据.*未上报/', $text)) {
+            return 'device_offline';
+        }
+        if (preg_match('/响应时间超阈值|响应超时|转运超时|超时预警/', $text)) {
+            return 'response_timeout';
+        }
+        if (preg_match('/状态严重不一致|状态有偏差|状态不一致/', $text)) {
+            return 'status_mismatch';
+        }
+        if (preg_match('/未派车|派车遗漏|事件积压/', $text)) {
+            return 'pending_dispatch';
+        }
+        if (preg_match('/轨迹偏离/', $text)) {
+            return 'trajectory_deviation';
+        }
+        if (preg_match('/检修超期|检修.*超|车辆未按规定|未按规定回库/', $text)) {
+            return 'maintenance';
+        }
+        if (preg_match('/疲劳|连续执勤/', $text)) {
+            return 'driver_fatigue';
+        }
+        if (preg_match('/耗材不足|库存不足/', $text)) {
+            return 'supply_shortage';
+        }
+        if (preg_match('/审批待办|待审批/', $text)) {
+            return 'approval_pending';
+        }
+
+        return 'default';
+    }
+}
+
+if (!function_exists('alertTypeInfo')) {
+    function alertTypeInfo(string $title, string $description = ''): array
+    {
+        $type = classifyAlert($title, $description);
+        $config = alertTypeConfig();
+        return $config[$type] ?? $config['default'];
+    }
+}
