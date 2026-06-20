@@ -521,14 +521,163 @@ h2 {
 
 @media (max-width: 880px) {
     .vehicle-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
     }
-    .vehicle-status-stats {
+
+    .vehicle-status-card {
+        border-radius: 10px;
+    }
+
+    .vehicle-card-header {
+        padding: 14px 14px 10px;
         gap: 8px;
     }
-    .vehicle-status-stats .stat-item {
+
+    .vehicle-code {
+        font-size: 20px;
+    }
+
+    .vehicle-plate {
+        font-size: 11px;
+    }
+
+    .vehicle-status-badge {
+        padding: 4px 10px;
+        font-size: 11px;
+        gap: 4px;
+    }
+
+    .pulse-dot {
+        width: 6px;
+        height: 6px;
+    }
+
+    .vehicle-card-body {
+        padding: 0 14px 10px;
+        gap: 6px;
+    }
+
+    .vehicle-info-row {
+        gap: 6px;
         font-size: 12px;
-        padding: 3px 10px;
+    }
+
+    .vehicle-info-row .info-label {
+        min-width: 52px;
+        font-size: 11px;
+    }
+
+    .vehicle-info-row.location-row .info-value.location {
+        font-size: 12px;
+    }
+
+    .vehicle-card-footer {
+        padding: 10px 14px 14px;
+        gap: 6px;
+    }
+
+    .active-case-info,
+    .dispatch-available,
+    .maintenance-info,
+    .abnormal-warning {
+        font-size: 12px;
+        gap: 5px;
+    }
+
+    .active-case-info .case-no {
+        font-size: 12px;
+    }
+
+    .update-time {
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 560px) {
+    .vehicle-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .vehicle-status-card {
+        border-radius: 12px;
+    }
+
+    .vehicle-status-card::before {
+        height: 3px;
+    }
+
+    .vehicle-card-header {
+        padding: 12px 12px 8px;
+    }
+
+    .vehicle-code-block {
+        gap: 2px;
+    }
+
+    .vehicle-code {
+        font-size: 22px;
+    }
+
+    .vehicle-plate {
+        font-size: 11px;
+    }
+
+    .vehicle-status-badge {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .vehicle-card-body {
+        padding: 0 12px 10px;
+    }
+
+    .vehicle-info-row {
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .vehicle-info-row .info-label {
+        min-width: 56px;
+        font-size: 12px;
+    }
+
+    .vehicle-info-row .info-value.hospital {
+        font-size: 13px;
+    }
+
+    .vehicle-info-row.location-row .info-value.location {
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .vehicle-card-footer {
+        padding: 10px 12px 12px;
+        gap: 8px;
+    }
+
+    .active-case-info {
+        gap: 6px;
+    }
+
+    .active-case-info .case-label {
+        font-size: 11px;
+    }
+
+    .active-case-info .case-no {
+        font-size: 13px;
+    }
+
+    .dispatch-available,
+    .maintenance-info,
+    .abnormal-warning {
+        font-size: 13px;
+    }
+
+    .status-tag-small {
+        padding: 1px 6px;
+        font-size: 11px;
     }
 }
 
@@ -1781,6 +1930,7 @@ select option.maintenance {
 }
 
 .front-alerts {
+    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
 }
@@ -1812,6 +1962,144 @@ select option.maintenance {
     border-left: 3px solid var(--ok);
     background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
     opacity: 0.9;
+}
+
+@media (max-width: 880px) {
+    .front-alerts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .front-alert {
+        min-height: auto;
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    .front-alert.alert-status-open {
+        border-left-width: 3px;
+    }
+
+    .front-alert.alert-status-resolved {
+        border-left-width: 3px;
+    }
+
+    .front-alert-type-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+
+    .front-alert-head {
+        padding-right: 30px;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .front-alert-title-row {
+        gap: 6px;
+    }
+
+    .alert-type-badge {
+        padding: 2px 7px;
+        font-size: 10px;
+        gap: 3px;
+    }
+
+    .alert-type-badge .alert-type-icon {
+        font-size: 11px;
+    }
+
+    .front-alert-title {
+        font-size: 13px;
+    }
+
+    .front-alert-desc {
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .front-alert-footer {
+        margin-top: 8px;
+        padding-top: 6px;
+        gap: 6px;
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 560px) {
+    .front-alerts {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .front-alert {
+        padding: 14px 12px;
+        border-radius: 12px;
+    }
+
+    .front-alert.alert-status-open {
+        border-left-width: 4px;
+    }
+
+    .front-alert.alert-status-resolved {
+        border-left-width: 4px;
+    }
+
+    .front-alert-type-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        opacity: 0.12;
+    }
+
+    .front-alert-head {
+        padding-right: 34px;
+        margin-bottom: 8px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .front-alert-title-row {
+        gap: 8px;
+        width: 100%;
+        align-items: center;
+    }
+
+    .alert-type-badge {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .front-alert-title {
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .front-alert-head .status-tag {
+        padding: 3px 10px;
+        font-size: 11px;
+    }
+
+    .front-alert-desc {
+        font-size: 13px;
+        line-height: 1.6;
+        color: #475569;
+    }
+
+    .front-alert-footer {
+        margin-top: 10px;
+        padding-top: 8px;
+        gap: 8px;
+        font-size: 11px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .alert-handled-by {
+        font-size: 12px;
+    }
 }
 
 .alert-type-badge {
@@ -2194,10 +2482,88 @@ select option.maintenance {
     }
 
     .topbar {
-        padding: 16px;
+        padding: 12px 16px;
+        min-height: 56px;
+        gap: 8px;
     }
 
-    .metrics,
+    .topbar .nav {
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13px;
+    }
+
+    .page {
+        width: 100%;
+        padding: 16px 0 32px;
+    }
+
+    .hero {
+        min-height: auto;
+        padding: 24px 20px;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .hero h1 {
+        font-size: 22px;
+    }
+
+    .hero .eyebrow {
+        font-size: 12px;
+    }
+
+    .hero .summary {
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .hero-panel {
+        min-width: auto;
+        padding: 16px;
+        text-align: center;
+    }
+
+    .hero-panel strong {
+        font-size: 40px;
+        margin: 4px 0;
+    }
+
+    .metrics {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .metrics div {
+        padding: 14px 12px;
+    }
+
+    .metrics span {
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+
+    .metrics strong {
+        font-size: 22px;
+    }
+
+    .panel {
+        padding: 14px 12px;
+        margin-bottom: 16px;
+    }
+
+    .panel-head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .panel-head h2 {
+        font-size: 16px;
+    }
+
     .grid.two,
     .alerts,
     .vehicle-grid,
@@ -2207,18 +2573,21 @@ select option.maintenance {
     }
 
     .vehicle-status-stats {
-        gap: 8px;
+        gap: 6px;
+        width: 100%;
     }
 
     .vehicle-status-stats .stat-item {
-        font-size: 12px;
-        padding: 3px 10px;
+        font-size: 11px;
+        padding: 3px 8px;
     }
 
     .alerts-refresh-info {
-        flex-direction: column;
-        gap: 4px;
-        align-items: flex-end;
+        flex-direction: row;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        justify-content: space-between;
     }
 
     .btn-handle {
@@ -2239,6 +2608,77 @@ select option.maintenance {
         flex-direction: column;
         align-items: flex-start;
         gap: 4px;
+    }
+}
+
+@media (max-width: 560px) {
+    .topbar {
+        padding: 10px 12px;
+    }
+
+    .topbar .brand {
+        gap: 10px;
+    }
+
+    .topbar .brand-mark {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        font-size: 14px;
+    }
+
+    .topbar .nav {
+        font-size: 12px;
+        gap: 10px;
+    }
+
+    .hero {
+        padding: 20px 16px;
+        border-radius: 0;
+        margin: 0 -16px 16px;
+    }
+
+    .hero h1 {
+        font-size: 20px;
+    }
+
+    .hero-panel {
+        padding: 14px;
+    }
+
+    .hero-panel strong {
+        font-size: 34px;
+    }
+
+    .metrics {
+        gap: 8px;
+    }
+
+    .metrics div {
+        padding: 12px 10px;
+        border-radius: 10px;
+    }
+
+    .metrics span {
+        font-size: 11px;
+        margin-bottom: 4px;
+    }
+
+    .metrics strong {
+        font-size: 20px;
+    }
+
+    .panel {
+        padding: 12px 10px;
+        border-radius: 10px;
+    }
+
+    .panel-head {
+        margin-bottom: 10px;
+    }
+
+    .panel-head h2 {
+        font-size: 15px;
     }
 }
 
@@ -2431,8 +2871,13 @@ select option.maintenance {
 }
 
 @media (max-width: 880px) {
-    .case-table-front .col-address {
-        display: none;
+    .case-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .case-table-front {
+        min-width: 640px;
     }
 
     .case-table-front th,
@@ -2441,18 +2886,141 @@ select option.maintenance {
     }
 
     .address-text {
-        max-width: 150px;
+        max-width: 180px;
+    }
+}
+
+@media (max-width: 640px) {
+    .case-table-wrap {
+        overflow-x: visible;
+    }
+
+    .case-table-front {
+        min-width: auto;
+        width: 100%;
+        display: block;
+    }
+
+    .case-table-front thead {
+        display: none;
+    }
+
+    .case-table-front tbody {
+        display: block;
+    }
+
+    .case-table-front .case-row {
+        display: block;
+        padding: 14px 12px;
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .case-table-front .case-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .case-table-front .case-row.case-status-reported,
+    .case-table-front .case-row.case-status-accepted {
+        border-left: 3px solid var(--warn);
+    }
+
+    .case-table-front .case-row.case-status-closed {
+        border-left: 3px solid var(--muted);
+        opacity: 0.85;
+    }
+
+    .case-table-front td {
+        display: flex;
+        align-items: center;
+        padding: 5px 0;
+        border-bottom: none;
+        gap: 10px;
+        font-size: 13px;
+    }
+
+    .case-table-front td:last-child {
+        padding-bottom: 0;
+    }
+
+    .case-table-front td:first-child {
+        padding-top: 0;
+    }
+
+    .mobile-label {
+        display: inline-block;
+        flex-shrink: 0;
+        min-width: 44px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+    }
+
+    .case-table-front .col-case-no {
+        width: auto;
+    }
+
+    .case-table-front .col-case-no .case-no-text {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--primary);
+    }
+
+    .case-table-front .col-priority,
+    .case-table-front .col-status,
+    .case-table-front .col-ambulance {
+        width: auto;
+    }
+
+    .case-table-front .col-address {
+        display: flex;
+    }
+
+    .address-text {
+        max-width: none;
+        white-space: normal;
+        word-break: break-all;
+        line-height: 1.5;
+        font-size: 13px;
+    }
+
+    .priority-badge {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .ambulance-info {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .status-tag {
+        padding: 3px 10px;
+        font-size: 12px;
     }
 }
 
 @media (max-width: 560px) {
-    .case-table-front {
-        font-size: 12px;
+    .case-table-front .case-row {
+        padding: 12px 10px;
+        border-radius: 10px;
     }
 
-    .case-table-front .col-priority,
-    .case-table-front .col-status {
-        width: auto;
+    .mobile-label {
+        min-width: 40px;
+        font-size: 11px;
+    }
+
+    .case-table-front td {
+        font-size: 13px;
+        padding: 4px 0;
+    }
+
+    .case-table-front .col-case-no .case-no-text {
+        font-size: 14px;
     }
 
     .priority-badge {
@@ -2468,6 +3036,10 @@ select option.maintenance {
     .status-tag {
         padding: 2px 8px;
         font-size: 11px;
+    }
+
+    .address-text {
+        font-size: 12px;
     }
 }
 

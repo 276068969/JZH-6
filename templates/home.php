@@ -108,64 +108,71 @@
             </span>
         </div>
     </div>
-    <table class="case-table-front">
-        <thead>
-            <tr>
-                <th class="col-case-no">编号</th>
-                <th class="col-priority">级别</th>
-                <th class="col-address">地址</th>
-                <th class="col-status">状态</th>
-                <th class="col-ambulance">车辆</th>
-            </tr>
-        </thead>
-        <tbody id="cases-tbody">
-        <?php foreach ($cases as $case): ?>
-            <?php
-                $isClosed = $case['status'] === 'closed';
-                $hasAmbulance = !empty($case['assigned_ambulance']);
-            ?>
-            <tr class="case-row case-status-<?= h($case['status']) ?><?= $isClosed ? ' case-row-closed' : '' ?>">
-                <td class="col-case-no">
-                    <span class="case-no-text"><?= h($case['case_no']) ?></span>
-                </td>
-                <td class="col-priority">
-                    <span class="priority-badge priority-<?= h($case['priority']) ?>">
-                        <span class="priority-dot"></span>
-                        <?= priorityText($case['priority']) ?>级
-                    </span>
-                </td>
-                <td class="col-address">
-                    <span class="address-text" title="<?= h($case['address'] ?? '') ?>">
-                        <?= h($case['address'] ?? '—') ?>
-                    </span>
-                </td>
-                <td class="col-status">
-                    <span class="status-tag <?= statusClass($case['status']) ?>">
-                        <?= statusText($case['status']) ?>
-                    </span>
-                </td>
-                <td class="col-ambulance">
-                    <?php if ($isClosed): ?>
-                        <span class="ambulance-info ambulance-closed">
-                            <span class="ambulance-icon">✓</span>
-                            <span class="ambulance-text">已结案</span>
+    <div class="case-table-wrap">
+        <table class="case-table-front">
+            <thead>
+                <tr>
+                    <th class="col-case-no">编号</th>
+                    <th class="col-priority">级别</th>
+                    <th class="col-address">地址</th>
+                    <th class="col-status">状态</th>
+                    <th class="col-ambulance">车辆</th>
+                </tr>
+            </thead>
+            <tbody id="cases-tbody">
+            <?php foreach ($cases as $case): ?>
+                <?php
+                    $isClosed = $case['status'] === 'closed';
+                    $hasAmbulance = !empty($case['assigned_ambulance']);
+                ?>
+                <tr class="case-row case-status-<?= h($case['status']) ?><?= $isClosed ? ' case-row-closed' : '' ?>">
+                    <td class="col-case-no">
+                        <span class="mobile-label">编号</span>
+                        <span class="case-no-text"><?= h($case['case_no']) ?></span>
+                    </td>
+                    <td class="col-priority">
+                        <span class="mobile-label">级别</span>
+                        <span class="priority-badge priority-<?= h($case['priority']) ?>">
+                            <span class="priority-dot"></span>
+                            <?= priorityText($case['priority']) ?>级
                         </span>
-                    <?php elseif ($hasAmbulance): ?>
-                        <span class="ambulance-info ambulance-assigned">
-                            <span class="ambulance-icon">🚑</span>
-                            <span class="ambulance-code"><?= h($case['assigned_ambulance']) ?></span>
+                    </td>
+                    <td class="col-address">
+                        <span class="mobile-label">地址</span>
+                        <span class="address-text" title="<?= h($case['address'] ?? '') ?>">
+                            <?= h($case['address'] ?? '—') ?>
                         </span>
-                    <?php else: ?>
-                        <span class="ambulance-info ambulance-pending">
-                            <span class="ambulance-icon">⏳</span>
-                            <span class="ambulance-text">待派车</span>
+                    </td>
+                    <td class="col-status">
+                        <span class="mobile-label">状态</span>
+                        <span class="status-tag <?= statusClass($case['status']) ?>">
+                            <?= statusText($case['status']) ?>
                         </span>
-                    <?php endif; ?>
-                </td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
+                    </td>
+                    <td class="col-ambulance">
+                        <span class="mobile-label">车辆</span>
+                        <?php if ($isClosed): ?>
+                            <span class="ambulance-info ambulance-closed">
+                                <span class="ambulance-icon">✓</span>
+                                <span class="ambulance-text">已结案</span>
+                            </span>
+                        <?php elseif ($hasAmbulance): ?>
+                            <span class="ambulance-info ambulance-assigned">
+                                <span class="ambulance-icon">🚑</span>
+                                <span class="ambulance-code"><?= h($case['assigned_ambulance']) ?></span>
+                            </span>
+                        <?php else: ?>
+                            <span class="ambulance-info ambulance-pending">
+                                <span class="ambulance-icon">⏳</span>
+                                <span class="ambulance-text">待派车</span>
+                            </span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <section class="panel">
@@ -388,39 +395,58 @@
 
             var tdNo = document.createElement('td');
             tdNo.className = 'col-case-no';
+            var labelNo = document.createElement('span');
+            labelNo.className = 'mobile-label';
+            labelNo.textContent = '编号';
             var noSpan = document.createElement('span');
             noSpan.className = 'case-no-text';
             noSpan.textContent = c.case_no;
+            tdNo.appendChild(labelNo);
             tdNo.appendChild(noSpan);
 
             var tdPri = document.createElement('td');
             tdPri.className = 'col-priority';
+            var labelPri = document.createElement('span');
+            labelPri.className = 'mobile-label';
+            labelPri.textContent = '级别';
             var priSpan = document.createElement('span');
             priSpan.className = 'priority-badge priority-' + c.priority;
             var priDot = document.createElement('span');
             priDot.className = 'priority-dot';
             priSpan.appendChild(priDot);
             priSpan.appendChild(document.createTextNode((priorityTextMap[c.priority] || c.priority) + '级'));
+            tdPri.appendChild(labelPri);
             tdPri.appendChild(priSpan);
 
             var tdAddr = document.createElement('td');
             tdAddr.className = 'col-address';
+            var labelAddr = document.createElement('span');
+            labelAddr.className = 'mobile-label';
+            labelAddr.textContent = '地址';
             var addrSpan = document.createElement('span');
             addrSpan.className = 'address-text';
             var addr = c.address || '—';
             addrSpan.textContent = addr;
             addrSpan.setAttribute('title', addr);
+            tdAddr.appendChild(labelAddr);
             tdAddr.appendChild(addrSpan);
 
             var tdStatus = document.createElement('td');
             tdStatus.className = 'col-status';
+            var labelStatus = document.createElement('span');
+            labelStatus.className = 'mobile-label';
+            labelStatus.textContent = '状态';
             var stSpan = document.createElement('span');
             stSpan.className = 'status-tag ' + (caseStatusClassMap[c.status] || '');
             stSpan.textContent = statusTextMap[c.status] || c.status;
+            tdStatus.appendChild(labelStatus);
             tdStatus.appendChild(stSpan);
 
             var tdAmb = document.createElement('td');
             tdAmb.className = 'col-ambulance';
+            var labelAmb = document.createElement('span');
+            labelAmb.className = 'mobile-label';
+            labelAmb.textContent = '车辆';
             var ambInfo = document.createElement('span');
             if (isClosed) {
                 ambInfo.className = 'ambulance-info ambulance-closed';
@@ -453,6 +479,7 @@
                 ambInfo.appendChild(i3);
                 ambInfo.appendChild(t3);
             }
+            tdAmb.appendChild(labelAmb);
             tdAmb.appendChild(ambInfo);
 
             tr.appendChild(tdNo);
